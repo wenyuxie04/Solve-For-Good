@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 from matching import match_grant
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 from azure.core.exceptions import AzureError
@@ -121,7 +123,65 @@ def show_source(grant):
     else:
         st.caption("Original announcement link not available.")
 
+def funding_label(grant):
+    def number(value):
+        try:
+            result = float(value)
+            return result if result >= 0 else None
+        except (ValueError, TypeError):
+            return None
 
+    minimum = number(grant.get("award_min"))
+    maximum = number(grant.get("award_max"))
+
+    if minimum is not None and maximum is not None:
+        if minimum == maximum:
+            return f"${maximum:,.0f}"
+        return f"${minimum:,.0f} – ${maximum:,.0f}"
+
+    if maximum is not None:
+        return f"Up to ${maximum:,.0f}"
+
+    if minimum is not None:
+        return f"From ${minimum:,.0f}"
+
+    return "Not stated"
+
+
+def deadline_date(grant):
+    value = grant.get("deadline")
+
+    if not value:
+        return None
+
+    for date_format in ("%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(
+                str(value).strip(), date_format
+            ).date()
+        except ValueError:
+            continue
+
+    return None
+
+
+def deadline_label(grant):
+    closing_date = deadline_date(grant)
+
+    if closing_date is None:
+        return grant.get("deadline") or "Not stated"
+
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    days_left = (closing_date - today).days
+
+    if days_left < 0:
+        timing = "Past closing date"
+    elif days_left == 0:
+        timing = "Closes today"
+    else:
+        timing = f"{days_left} days left"
+
+    return f"{closing_date:%b %d, %Y} · {timing}"
 # Left sidebar navigation
 with st.sidebar:
     agency_id = st.selectbox(
@@ -209,6 +269,50 @@ if st.session_state.page == "Search":
             results,
             key=lambda grant: grant.get("title", "").lower(),
         )
+    deadline_window = st.selectbox(
+        "Deadline",
+        ["Any date", "Next 30 days", "Next 60 days", "Next 90 days"],
+    )
+
+    include_unknown = st.checkbox(
+        "Include unknown or unrecognized deadlines",
+        value=True,
+    )
+
+    hide_past = st.checkbox(
+        "Hide grants past their closing date",
+        value=True,
+    )
+
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    maximum_days = {
+        "Next 30 days": 30,
+        "Next 60 days": 60,
+        "Next 90 days": 90,
+    }.get(deadline_window)
+
+    filtered_results = []
+
+    for grant in results:
+        closing_date = deadline_date(grant)
+
+        if closing_date is None:
+            if include_unknown:
+                filtered_results.append(grant)
+            continue
+
+        days_left = (closing_date - today).days
+
+        if hide_past and days_left < 0:
+            continue
+
+        if maximum_days is not None:
+            if not 0 <= days_left <= maximum_days:
+                continue
+
+        filtered_results.append(grant)
+
+    results = filtered_results
     eligibility_filter = st.selectbox(
         "Applicant-type filter",
         [
@@ -257,10 +361,16 @@ if st.session_state.page == "Search":
                 st.caption("Keyword matches")
                 st.write(str(match["keyword_count"]))
 
-            st.write(
-                f"**Deadline:** "
-                f"{grant.get('deadline') or 'Not stated'}"
-            )
+            funding_column, deadline_column = st.columns(2)
+
+            with funding_column:
+                st.write("**Award amount**")
+                st.write(funding_label(grant))
+
+            with deadline_column:
+                st.write("**Deadline**")
+                st.write(deadline_label(grant))
+        
             st.write(
                 f"**Eligibility:** "
                 f"{grant.get('eligibility_text') or 'Not stated'}"
@@ -319,8 +429,11 @@ elif st.session_state.page == "Grant Details":
                 st.write("**Funder**")
                 st.write(grant.get("funder") or "Not stated")
 
+                st.write("**Award amount**")
+                st.write(funding_label(grant))
+
                 st.write("**Deadline**")
-                st.write(grant.get("deadline") or "Not stated")
+                st.write(deadline_label(grant))
 
                 st.write("**Eligibility**")
                 st.write(
