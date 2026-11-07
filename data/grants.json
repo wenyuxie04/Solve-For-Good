@@ -1,1 +1,20 @@
-
+[
+  {
+    "id": "demo-001",
+    "title": "Demo Water Quality Grant",
+    "funder": "Example Funder",
+    "description": "Supports projects that improve water quality.",
+    "deadline": null,
+    "eligibility_text": "State government agencies. Fictional test data.",
+    "source_url": null
+  },
+  {
+    "id": "demo-002",
+    "title": "Demo Community Resilience Grant",
+    "funder": "Example Funder",
+    "description": "Supports community disaster preparedness projects.",
+    "deadline": null,
+    "eligibility_text": "Eligibility needs verification. Fictional test data.",
+    "source_url": null
+  }
+]
