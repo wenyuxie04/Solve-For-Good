@@ -65,7 +65,7 @@ def list_shared_grants(workspace_id="demo-agency"):
         reverse=True,
     )
 
-def update_review_status(record, status):
+def update_review_status(record, status, assigned_reviewer=""):
     allowed = {"Not Reviewed", "Under Review", "Pursue", "Pass"}
 
     if status not in allowed:
@@ -76,7 +76,7 @@ def update_review_status(record, status):
         for key, value in record.items()
         if not key.startswith("_")
     }
-    updated["status"] = status
+    updated["assigned_reviewer"] = assigned_reviewer.strip()
     updated["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     blob = get_container().get_blob_client(record["_blob_name"])
