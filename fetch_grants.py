@@ -93,6 +93,7 @@ def fetch_grants(keyword="water", limit=10):
         # the complete Grants.gov applicant-type vocabulary.
         records.append({
             "id": f"grants-gov-{opportunity_id}",
+            "opportunity_number": hit.get("number") or None,
             "is_demo": False,
             "title": hit.get("title") or "Untitled opportunity",
             "funder": hit.get("agencyName") or "Not stated",
