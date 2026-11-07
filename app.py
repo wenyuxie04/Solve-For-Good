@@ -4,7 +4,11 @@ from pathlib import Path
 import streamlit as st
 from azure.core.exceptions import AzureError
 
-from storage import share_grant, list_shared_grants
+from storage import (
+    share_grant,
+    list_shared_grants,
+    update_review_status,
+)
 
 
 st.set_page_config(
@@ -289,13 +293,70 @@ elif st.session_state.page == "Workspace":
                 use_container_width=True,
             )
 
-            st.subheader("Open a shared grant")
+                        st.subheader("Review shared grants")
+
+            statuses = [
+                "Not Reviewed",
+                "Under Review",
+                "Pursue",
+                "Pass",
+            ]
 
             for record in records:
                 grant = record["grant"]
 
-                if st.button(
-                    grant["title"],
-                    key=f"workspace-details-{grant['id']}",
-                ):
-                    navigate("Grant Details", grant)
+                with st.expander(grant["title"]):
+                    st.write(
+                        grant.get("description") or "Not stated"
+                    )
+
+                    current_status = record.get(
+                        "status", "Not Reviewed"
+                    )
+                    if current_status not in statuses:
+                        current_status = "Not Reviewed"
+
+                    # Include the version so changed records reload
+                    # with the latest saved status.
+                    version_key = (
+                        f"{grant['id']}-{record['_etag']}"
+                    )
+
+                    with st.form(f"review-{version_key}"):
+                        selected_status = st.selectbox(
+                            "Review status",
+                            statuses,
+                            index=statuses.index(current_status),
+                        )
+                        submitted = st.form_submit_button(
+                            "Save status"
+                        )
+
+                    if submitted:
+                        try:
+                            saved = update_review_status(
+                                record, selected_status
+                            )
+
+                            if saved:
+                                st.success(
+                                    "Saved to Azure. Click Refresh "
+                                    "workspace to update the table."
+                                )
+                            else:
+                                st.warning(
+                                    "Someone updated this grant. "
+                                    "Refresh the workspace before "
+                                    "trying again."
+                                )
+                        except (AzureError, KeyError, ValueError):
+                            st.error(
+                                "Could not save the status. "
+                                "Please try again."
+                            )
+
+                    if st.button(
+                        "View full details",
+                        key=f"workspace-details-{grant['id']}",
+                    ):
+                        navigate("Grant Details", grant)
