@@ -55,6 +55,18 @@ data_path = Path(__file__).parent / "data" / "grants.json"
 with data_path.open(encoding="utf-8") as file:
     grants = json.load(file)
 
+agency_directory = Path(__file__).parent / "data" / "agencies"
+agencies = {}
+
+for profile_path in sorted(agency_directory.glob("*.json")):
+    with profile_path.open(encoding="utf-8") as file:
+        profile = json.load(file)
+        agencies[profile["id"]] = profile
+
+if not agencies:
+    st.error("No agency profiles found in data/agencies.")
+    st.stop()
+
 st.session_state.setdefault("page", "Search")
 st.session_state.setdefault("selected_grant", None)
 st.session_state.setdefault("search_text", "")
@@ -90,6 +102,13 @@ def show_source(grant):
 
 # Left sidebar navigation
 with st.sidebar:
+    agency_id = st.selectbox(
+        "Agency",
+        options=list(agencies),
+        format_func=lambda agency_id: agencies[agency_id]["short_name"],
+        key="selected_agency",
+    )
+    agency = agencies[agency_id]
     st.markdown("### Federal Funds Matchmaker")
     st.caption("Agency funding workspace")
     st.divider()
@@ -115,7 +134,17 @@ with st.sidebar:
 if st.session_state.page == "Search":
     st.header("Find funding opportunities")
     st.write("Explore grants and share opportunities with your agency.")
+    st.caption(f"Selected agency: {agency['name']}")
 
+    with st.expander("Agency priorities"):
+        for priority in agency["priorities"]:
+            if priority.get("enabled", True):
+                st.markdown(f"**{priority['title']}**")
+                st.write(priority["description"])
+                st.link_button(
+                    "View priority source",
+                    priority["source_url"],
+                )
     st.session_state.setdefault(
         "search_input",
         st.session_state.search_text,
