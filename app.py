@@ -1,12 +1,12 @@
 import json
-from pathlib import Path
-from matching import match_grant
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import streamlit as st
 from azure.core.exceptions import AzureError
 
+from matching import match_grant
 from storage import (
     share_grant,
     list_shared_grants,
@@ -45,34 +45,24 @@ st.markdown(
         margin-bottom: 16px;
     }
     </style>
-    <div class="brand-line"></div>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("Federal Funds Matchmaker")
-st.caption("Federal grant discovery & agency collaboration")
 
+# DATA
 data_directory = Path(__file__).parent / "data"
 live_path = data_directory / "grants-live.json"
 
 if live_path.exists():
     data_path = live_path
-    st.caption("Data source: Grants.gov snapshot")
 else:
     data_path = data_directory / "grants.json"
-    st.warning("Using fictional demo grants. Real data not loaded yet.")
 
 with data_path.open(encoding="utf-8") as file:
     grants = json.load(file)
 
-if data_path == live_path and grants:
-    st.caption(
-        f"Fetched: {grants[0].get('fetched_at', 'Unknown')} "
-        "· Snapshot refresh is currently manual"
-    )
-
-agency_directory = Path(__file__).parent / "data" / "agencies"
+agency_directory = data_directory / "agencies"
 agencies = {}
 
 for profile_path in sorted(agency_directory.glob("*.json")):
@@ -89,6 +79,7 @@ st.session_state.setdefault("selected_grant", None)
 st.session_state.setdefault("search_text", "")
 
 
+# HELPERS
 def navigate(page, grant=None):
     st.session_state.page = page
     if grant is not None:
@@ -104,7 +95,8 @@ def share_button(grant, key, workspace_id):
     if st.button("Share to workspace", key=key):
         try:
             created = share_grant(
-                grant, workspace_id=workspace_id
+                grant,
+                workspace_id=workspace_id,
             )
             if created:
                 st.success("Added to agency workspace.")
@@ -116,12 +108,12 @@ def share_button(grant, key, workspace_id):
 
 def show_source(grant):
     url = grant.get("source_url")
-
     if url:
         st.link_button("Open original grant announcement ↗", url)
         st.caption(url)
     else:
         st.caption("Original announcement link not available.")
+
 
 def funding_label(grant):
     def number(value):
@@ -150,14 +142,14 @@ def funding_label(grant):
 
 def deadline_date(grant):
     value = grant.get("deadline")
-
     if not value:
         return None
 
     for date_format in ("%m/%d/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(
-                str(value).strip(), date_format
+                str(value).strip(),
+                date_format,
             ).date()
         except ValueError:
             continue
@@ -167,7 +159,6 @@ def deadline_date(grant):
 
 def deadline_label(grant):
     closing_date = deadline_date(grant)
-
     if closing_date is None:
         return grant.get("deadline") or "Not stated"
 
@@ -182,17 +173,53 @@ def deadline_label(grant):
         timing = f"{days_left} days left"
 
     return f"{closing_date:%b %d, %Y} · {timing}"
-# Left sidebar navigation
+
+
+def show_data_footer():
+    st.divider()
+
+    if data_path != live_path:
+        st.warning("Data source: fictional demo grants")
+        return
+
+    st.caption("Data source: Grants.gov snapshot")
+
+    fetched_at = grants[0].get("fetched_at") if grants else None
+    fetched_label = fetched_at or "Unknown"
+
+    if fetched_at:
+        try:
+            fetched_label = datetime.fromisoformat(
+                fetched_at
+            ).astimezone(
+                ZoneInfo("America/New_York")
+            ).strftime("%b %d, %Y · %I:%M %p %Z")
+        except (ValueError, TypeError):
+            pass
+
+    st.caption(
+        f"Fetched: {fetched_label} · Refresh is currently manual"
+    )
+
+
+# LEFT SIDEBAR
 with st.sidebar:
+    st.markdown(
+        '<div class="brand-line"></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("### Federal Funds Matchmaker")
+    st.caption("Federal grant discovery & agency collaboration")
+    st.divider()
+
     agency_id = st.selectbox(
         "Agency",
         options=list(agencies),
-        format_func=lambda agency_id: agencies[agency_id]["short_name"],
+        format_func=lambda value: agencies[value]["short_name"],
         key="selected_agency",
     )
     agency = agencies[agency_id]
-    st.markdown("### Federal Funds Matchmaker")
-    st.caption("Agency funding workspace")
+
     st.divider()
 
     for page in ["Search", "Grant Details", "Workspace"]:
@@ -223,10 +250,12 @@ if st.session_state.page == "Search":
             if priority.get("enabled", True):
                 st.markdown(f"**{priority['title']}**")
                 st.write(priority["description"])
-                st.link_button(
-                    "View priority source",
-                    priority["source_url"],
-                )
+                if priority.get("source_url"):
+                    st.link_button(
+                        "View priority source",
+                        priority["source_url"],
+                    )
+
     st.session_state.setdefault(
         "search_input",
         st.session_state.search_text,
@@ -250,8 +279,8 @@ if st.session_state.page == "Search":
         grant
         for grant in grants
         if query in (
-            f"{grant.get('title', '')} "
-            f"{grant.get('description', '')}"
+            f"{grant.get('title') or ''} "
+            f"{grant.get('description') or ''}"
         ).lower()
     ]
 
@@ -263,12 +292,12 @@ if st.session_state.page == "Search":
                 grant["title"].lower(),
             ),
         )
-
     elif sort_by == "Title A–Z":
         results = sorted(
             results,
             key=lambda grant: grant.get("title", "").lower(),
         )
+
     deadline_window = st.selectbox(
         "Deadline",
         ["Any date", "Next 30 days", "Next 60 days", "Next 90 days"],
@@ -313,6 +342,7 @@ if st.session_state.page == "Search":
         filtered_results.append(grant)
 
     results = filtered_results
+
     eligibility_filter = st.selectbox(
         "Applicant-type filter",
         [
@@ -330,11 +360,12 @@ if st.session_state.page == "Search":
             if match_grant(grant, agency)["eligibility"]["status"]
             == eligibility_filter
         ]
+
     st.subheader("Grant opportunities")
     st.caption(f"{len(results)} results")
 
     if not results:
-        st.info("No matches. Try another keyword.")
+        st.info("No matches. Try another keyword or adjust the filters.")
 
     for grant in results:
         match = match_grant(grant, agency)
@@ -354,9 +385,10 @@ if st.session_state.page == "Search":
 
                 if grant.get("source_url"):
                     st.link_button(
-                        "View on Grants.gov ↗",
+                        "Open original posting ↗",
                         grant["source_url"],
                     )
+
             with relevance:
                 st.caption("Keyword matches")
                 st.write(str(match["keyword_count"]))
@@ -370,22 +402,22 @@ if st.session_state.page == "Search":
             with deadline_column:
                 st.write("**Deadline**")
                 st.write(deadline_label(grant))
-        
+
             st.write(
-                f"**Eligibility:** "
-                f"{grant.get('eligibility_text') or 'Not stated'}"
+                "**Eligibility:** "
+                + (grant.get("eligibility_text") or "Not stated")
             )
-            st.write(
-                grant.get("description") or "Not stated"
-            )
+            st.write(grant.get("description") or "Not stated")
+
             st.write("**Why this matches**")
             st.write(match["reason"])
 
             st.write(
-                f"**Applicant-type check:** "
-                f"{match['eligibility']['status']}"
+                "**Applicant-type check:** "
+                + match["eligibility"]["status"]
             )
             st.caption(match["eligibility"]["reason"])
+
             share_column, detail_column = st.columns(2)
 
             with share_column:
@@ -404,6 +436,9 @@ if st.session_state.page == "Search":
                 ):
                     navigate("Grant Details", grant)
 
+    # Appears once, below all results, including an empty result list.
+    show_data_footer()
+
 
 # GRANT DETAILS
 elif st.session_state.page == "Grant Details":
@@ -416,16 +451,17 @@ elif st.session_state.page == "Grant Details":
             navigate("Search")
 
         st.header(grant["title"])
-
         facts, content = st.columns([1, 2])
 
         with facts:
             with st.container(border=True):
                 st.subheader("Key information")
+
                 st.write("**Funding opportunity number**")
                 st.write(
                     grant.get("opportunity_number") or "Not stated"
                 )
+
                 st.write("**Funder**")
                 st.write(grant.get("funder") or "Not stated")
 
@@ -443,7 +479,9 @@ elif st.session_state.page == "Grant Details":
 
                 show_source(grant)
                 share_button(
-                    grant, "detail-share", agency_id
+                    grant,
+                    "detail-share",
+                    agency_id,
                 )
 
         with content:
@@ -492,7 +530,7 @@ elif st.session_state.page == "Workspace":
 
     try:
         records = list_shared_grants(
-            workspace_id=agency_id
+            workspace_id=agency_id,
         )
     except (AzureError, KeyError, ValueError):
         st.error("Could not load the workspace from Azure.")
@@ -503,12 +541,14 @@ elif st.session_state.page == "Workspace":
             "Show passed grants",
             value=False,
         )
+
         if not show_passed:
             records = [
                 record
                 for record in records
                 if record.get("status") != "Pass"
             ]
+
         if not records:
             st.info(
                 "No active shared grants. Share one from Search "
@@ -540,6 +580,7 @@ elif st.session_state.page == "Workspace":
                 hide_index=True,
                 use_container_width=True,
             )
+
             st.subheader("Review shared grants")
 
             statuses = [
@@ -563,10 +604,8 @@ elif st.session_state.page == "Workspace":
                     if current_status not in statuses:
                         current_status = "Not Reviewed"
 
-                    # Include the version so changed records reload
-                    # with the latest saved status.
                     version_key = (
-                        f"{grant['id']}-{record['_etag']}"
+                        f"{agency_id}-{grant['id']}-{record['_etag']}"
                     )
 
                     with st.form(f"review-{version_key}"):
@@ -577,10 +616,9 @@ elif st.session_state.page == "Workspace":
                         )
                         assigned_reviewer = st.text_input(
                             "Assigned reviewer",
-                            value=record.get("assigned_reviewer", ""),
+                            value=record.get("assigned_reviewer") or "",
                             placeholder="Enter a teammate's name",
                         )
-
                         submitted = st.form_submit_button(
                             "Save review"
                         )
@@ -592,7 +630,6 @@ elif st.session_state.page == "Workspace":
                                 selected_status,
                                 assigned_reviewer,
                             )
-
                             if saved:
                                 st.rerun()
                             else:
@@ -603,9 +640,10 @@ elif st.session_state.page == "Workspace":
                                 )
                         except (AzureError, KeyError, ValueError):
                             st.error(
-                                "Could not save the status. "
+                                "Could not save the review. "
                                 "Please try again."
                             )
+
                     st.markdown("#### Comments")
 
                     for comment in record.get("comments", []):
@@ -634,7 +672,9 @@ elif st.session_state.page == "Workspace":
                         else:
                             try:
                                 saved = add_comment(
-                                    record, author, comment_text
+                                    record,
+                                    author,
+                                    comment_text,
                                 )
                                 if saved:
                                     st.rerun()
@@ -649,6 +689,7 @@ elif st.session_state.page == "Workspace":
                                     "Could not save your comment. "
                                     "Copy it before refreshing."
                                 )
+
                     if st.button(
                         "View full details",
                         key=f"workspace-details-{grant['id']}",
