@@ -94,3 +94,40 @@ def update_review_status(record, status, assigned_reviewer=""):
         return True
     except ResourceModifiedError:
         return False
+
+def add_comment(record, author, text):
+    author = author.strip()
+    text = text.strip()
+
+    if not author or not text:
+        raise ValueError("Name and comment are required")
+
+    updated = {
+        key: value
+        for key, value in record.items()
+        if not key.startswith("_")
+    }
+
+    comments = list(updated.get("comments", []))
+    comments.append({
+        "author": author,
+        "text": text,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    updated["comments"] = comments
+
+    blob = get_container().get_blob_client(record["_blob_name"])
+
+    try:
+        blob.upload_blob(
+            json.dumps(updated, ensure_ascii=False).encode("utf-8"),
+            overwrite=True,
+            etag=record["_etag"],
+            match_condition=MatchConditions.IfNotModified,
+            content_settings=ContentSettings(
+                content_type="application/json"
+            ),
+        )
+        return True
+    except ResourceModifiedError:
+        return False
