@@ -84,10 +84,12 @@ def remember_search():
     st.session_state.search_text = st.session_state.search_input
 
 
-def share_button(grant, key):
+def share_button(grant, key, workspace_id):
     if st.button("Share to workspace", key=key):
         try:
-            created = share_grant(grant)
+            created = share_grant(
+                grant, workspace_id=workspace_id
+            )
             if created:
                 st.success("Added to agency workspace.")
             else:
@@ -236,6 +238,7 @@ if st.session_state.page == "Search":
                 share_button(
                     grant,
                     f"search-share-{grant['id']}",
+                    agency_id,
                 )
 
             with detail_column:
@@ -279,7 +282,9 @@ elif st.session_state.page == "Grant Details":
                 st.caption("Verify against the official notice.")
 
                 show_source(grant)
-                share_button(grant, "detail-share")
+                share_button(
+                    grant, "detail-share", agency_id
+                )
 
         with content:
             with st.container(border=True):
@@ -320,13 +325,15 @@ elif st.session_state.page == "Grant Details":
 elif st.session_state.page == "Workspace":
     st.header("Agency workspace")
     st.caption(
-        "One shared demo agency · login not connected yet"
+        f"{agency['name']} · Demo workspace · Login not connected"
     )
 
     st.button("Refresh workspace")
 
     try:
-        records = list_shared_grants()
+        records = list_shared_grants(
+            workspace_id=agency_id
+        )
     except (AzureError, KeyError, ValueError):
         st.error("Could not load the workspace from Azure.")
         records = None
