@@ -464,7 +464,7 @@ with st.sidebar:
 
     st.divider()
 
-       pages = ["Search", "Workspace", "Dashboard"]
+    pages = ["Search", "Workspace", "Dashboard"]
 
     for index, page in enumerate(pages):
         if st.button(
