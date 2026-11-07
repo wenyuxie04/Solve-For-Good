@@ -51,10 +51,24 @@ st.markdown(
 st.title("Federal Funds Matchmaker")
 st.caption("Federal grant discovery & agency collaboration")
 
-data_path = Path(__file__).parent / "data" / "grants.json"
+data_directory = Path(__file__).parent / "data"
+live_path = data_directory / "grants-live.json"
+
+if live_path.exists():
+    data_path = live_path
+    st.caption("Data source: Grants.gov snapshot")
+else:
+    data_path = data_directory / "grants.json"
+    st.warning("Using fictional demo grants. Real data not loaded yet.")
 
 with data_path.open(encoding="utf-8") as file:
     grants = json.load(file)
+
+if data_path == live_path and grants:
+    st.caption(
+        f"Fetched: {grants[0].get('fetched_at', 'Unknown')} "
+        "· Snapshot refresh is currently manual"
+    )
 
 agency_directory = Path(__file__).parent / "data" / "agencies"
 agencies = {}
