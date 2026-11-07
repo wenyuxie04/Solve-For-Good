@@ -1,6 +1,7 @@
 import hashlib
 import json
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -36,66 +37,45 @@ st.markdown(
         max-width: 1150px;
         padding-top: 2rem;
     }
-
     h1 {
         font-size: 2rem !important;
         letter-spacing: -0.04em;
     }
-
     h2, h3 {
         letter-spacing: -0.02em;
     }
-
     div[data-testid="stVerticalBlockBorderWrapper"] {
         border-radius: 14px;
     }
-
     .brand-line {
-        height: 5px;
+        height: 4px;
         width: 64px;
         background: #7BAFD4;
         border-radius: 4px;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
     }
 
+    /* Balanced sidebar spacing */
     [data-testid="stSidebarUserContent"] {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
+        padding: 1.4rem 1.2rem;
     }
-
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        gap: 0.45rem;
-    }
-
     [data-testid="stSidebar"] h3 {
-        font-size: 1.15rem;
+        font-size: 1.3rem;
+        line-height: 1.3;
         padding-top: 0;
-        padding-bottom: 0.2rem;
+        padding-bottom: 0.4rem;
     }
-
     [data-testid="stSidebar"] h5 {
-        padding-top: 0;
-        padding-bottom: 0;
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
     }
-
     [data-testid="stSidebar"] hr {
-        margin: 0.3rem 0;
+        margin: 0.55rem 0;
         border-color: rgba(19, 41, 75, 0.15);
     }
-
-    [data-testid="stSidebar"] .brand-line {
-        height: 4px;
-        margin-bottom: 6px;
-    }
-
     [data-testid="stSidebar"] [data-testid="stButton"] button {
-        min-height: 2.4rem;
-        padding-top: 0.35rem;
-        padding-bottom: 0.35rem;
-    }
-
-    [data-testid="stSidebar"] p {
-        margin-bottom: 0.25rem;
+        min-height: 2.8rem;
+        padding: 0.5rem 0.8rem;
     }
     </style>
     """,
@@ -115,10 +95,7 @@ data_path = (
 with data_path.open(encoding="utf-8") as file:
     grants = json.load(file)
 
-grants_by_id = {
-    str(grant["id"]): grant
-    for grant in grants
-}
+grants_by_id = {str(grant["id"]): grant for grant in grants}
 
 agencies = {}
 for profile_path in sorted(
@@ -135,6 +112,12 @@ if not agencies:
 st.session_state.setdefault("page", "Search")
 st.session_state.setdefault("selected_grant", None)
 st.session_state.setdefault("search_text", "")
+
+ELIGIBILITY_OPTIONS = [
+    "Applicant type matches",
+    "Needs verification",
+    "Applicant type does not match",
+]
 
 
 # GENERAL HELPERS
@@ -162,7 +145,6 @@ def stable_key(value):
 def parsed_timestamp(value):
     if not value:
         return None
-
     try:
         result = datetime.fromisoformat(
             str(value).replace("Z", "+00:00")
@@ -184,18 +166,34 @@ def display_timestamp(value):
     ).strftime("%b %d, %Y · %I:%M %p %Z")
 
 
-def funding_label(grant):
-    def number(value):
-        try:
-            result = float(value)
-            if math.isfinite(result) and result >= 0:
-                return result
-        except (ValueError, TypeError):
-            pass
-        return None
+def numeric_amount(value):
+    try:
+        result = float(
+            str(value).replace(",", "").replace("$", "")
+        )
+        if math.isfinite(result) and result >= 0:
+            return result
+    except (ValueError, TypeError):
+        pass
+    return None
 
-    minimum = number(grant.get("award_min"))
-    maximum = number(grant.get("award_max"))
+
+def award_bounds(grant):
+    minimum = numeric_amount(grant.get("award_min"))
+    maximum = numeric_amount(grant.get("award_max"))
+
+    if (
+        minimum is not None
+        and maximum is not None
+        and minimum > maximum
+    ):
+        return None, None
+
+    return minimum, maximum
+
+
+def funding_label(grant):
+    minimum, maximum = award_bounds(grant)
 
     if minimum is not None and maximum is not None:
         if minimum == maximum:
@@ -211,6 +209,23 @@ def funding_label(grant):
     return "Not stated"
 
 
+def budget_matches(grant, selected_range, include_unknown):
+    minimum, maximum = award_bounds(grant)
+
+    if minimum is None and maximum is None:
+        return include_unknown
+
+    # Missing bounds remain open for overlap filtering.
+    lower_bound = minimum if minimum is not None else 0
+    upper_bound = maximum if maximum is not None else math.inf
+    selected_minimum, selected_maximum = selected_range
+
+    return (
+        lower_bound <= selected_maximum
+        and upper_bound >= selected_minimum
+    )
+
+
 def deadline_date(grant):
     value = grant.get("deadline")
     if not value:
@@ -219,8 +234,7 @@ def deadline_date(grant):
     for date_format in ("%m/%d/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(
-                str(value).strip(),
-                date_format,
+                str(value).strip(), date_format
             ).date()
         except ValueError:
             continue
@@ -233,9 +247,7 @@ def deadline_label(grant):
     if closing_date is None:
         return grant.get("deadline") or "Not stated"
 
-    today = datetime.now(
-        ZoneInfo("America/New_York")
-    ).date()
+    today = datetime.now(ZoneInfo("America/New_York")).date()
     days_left = (closing_date - today).days
 
     if days_left < 0:
@@ -248,14 +260,41 @@ def deadline_label(grant):
     return f"{closing_date:%b %d, %Y} · {timing}"
 
 
+def first_sentence(value):
+    text = " ".join(str(value or "").split())
+    if not text:
+        return "Not stated"
+
+    # Avoid splitting common abbreviations such as "i.e."
+    sentences = re.split(
+        r"(?<=[.!?])\s+(?=[A-Z])", text, maxsplit=1
+    )
+    return sentences[0]
+
+
+def eligibility_summary(grant):
+    # Use the applicant categories for a compact search-card summary.
+    types = grant.get("applicant_types_raw") or []
+    labels = []
+
+    for item in types:
+        label = str(item.get("description") or "").strip()
+
+        # Keep detailed category qualifications on the Details page.
+        label = re.sub(r"\s*\(.*", "", label).strip()
+        if label and label not in labels:
+            labels.append(label)
+
+    if labels:
+        return "Listed applicants: " + "; ".join(labels) + "."
+
+    return first_sentence(grant.get("eligibility_text"))
+
+
 def show_source(grant):
     url = grant.get("source_url")
-
     if url:
-        st.link_button(
-            "Open original grant announcement ↗",
-            url,
-        )
+        st.link_button("Open original grant announcement ↗", url)
         st.caption(url)
     else:
         st.caption("Original announcement link not available.")
@@ -279,12 +318,7 @@ def show_data_footer():
         return
 
     st.caption("Data source: Grants.gov snapshot")
-
-    fetched_at = (
-        grants[0].get("fetched_at")
-        if grants
-        else None
-    )
+    fetched_at = grants[0].get("fetched_at") if grants else None
     st.caption(
         f"Fetched: {display_timestamp(fetched_at)}"
         " · Refresh is currently manual"
@@ -293,16 +327,14 @@ def show_data_footer():
 
 def load_workspace(workspace_id):
     try:
-        return list_shared_grants(
-            workspace_id=workspace_id
-        )
+        return list_shared_grants(workspace_id=workspace_id)
     except (AzureError, KeyError, ValueError):
         st.error("Could not load the workspace from Azure.")
         return None
 
 
 # FAVORITES
-# Demo identities organize data but do not authenticate users.
+# Demo identities organize records; they do not authenticate users.
 def favorite_prefix(workspace_id, user_name):
     user_id = stable_key(identity_key(user_name))
     return f"favorites/{workspace_id}/{user_id}/"
@@ -323,10 +355,7 @@ def save_favorite(grant, workspace_id, user_name):
 
     try:
         get_container().get_blob_client(blob_name).upload_blob(
-            json.dumps(
-                record,
-                ensure_ascii=False,
-            ).encode("utf-8"),
+            json.dumps(record, ensure_ascii=False).encode("utf-8"),
             overwrite=False,
             content_settings=ContentSettings(
                 content_type="application/json"
@@ -342,10 +371,7 @@ def list_favorites(workspace_id, user_name):
     records = []
 
     for item in container.list_blobs(
-        name_starts_with=favorite_prefix(
-            workspace_id,
-            user_name,
-        )
+        name_starts_with=favorite_prefix(workspace_id, user_name)
     ):
         content = container.get_blob_client(
             item.name
@@ -365,17 +391,11 @@ def list_favorites(workspace_id, user_name):
 def favorite_button(grant, key, workspace_id, user_name):
     if st.button("☆ Favorite", key=key):
         if not user_name:
-            st.warning(
-                "Enter your demo name in the sidebar first."
-            )
+            st.warning("Enter your demo name in the sidebar first.")
             return
 
         try:
-            created = save_favorite(
-                grant,
-                workspace_id,
-                user_name,
-            )
+            created = save_favorite(grant, workspace_id, user_name)
             if created:
                 st.success("Saved to your dashboard favorites.")
             else:
@@ -387,18 +407,13 @@ def favorite_button(grant, key, workspace_id, user_name):
 def share_button(grant, key, workspace_id):
     if st.button("Share to workspace", key=key):
         try:
-            created = share_grant(
-                grant,
-                workspace_id=workspace_id,
-            )
+            created = share_grant(grant, workspace_id=workspace_id)
             if created:
                 st.success("Added to agency workspace.")
             else:
                 st.info("Already in the agency workspace.")
         except (AzureError, KeyError, ValueError):
-            st.error(
-                "Could not save. Check the Azure connection."
-            )
+            st.error("Could not save. Check the Azure connection.")
 
 
 def open_details_button(grant, key):
@@ -408,19 +423,15 @@ def open_details_button(grant, key):
         type="primary",
         use_container_width=True,
     ):
-        navigate("Grant Details", grant)
+        # Prefer the current source snapshot over an older shared copy.
+        current_grant = grants_by_id.get(str(grant["id"]), grant)
+        navigate("Grant Details", current_grant)
 
 
-# REVIEW AND THREADED DISCUSSIONS
+# REVIEW AND DISCUSSIONS
 def show_review_editor(record, workspace_id, user_name):
     grant = record["grant"]
-    statuses = [
-        "Not Reviewed",
-        "Under Review",
-        "Pursue",
-        "Pass",
-    ]
-
+    statuses = ["Not Reviewed", "Under Review", "Pursue", "Pass"]
     version_key = (
         f"{workspace_id}-{grant['id']}-{record['_etag']}"
     )
@@ -429,16 +440,11 @@ def show_review_editor(record, workspace_id, user_name):
         st.subheader(grant["title"])
         st.write(
             "**Funding opportunity number:** "
-            + str(
-                grant.get("opportunity_number")
-                or "Not stated"
-            )
+            + str(grant.get("opportunity_number") or "Not stated")
         )
         st.write(f"**Deadline:** {deadline_label(grant)}")
 
-        current_status = (
-            record.get("status") or "Not Reviewed"
-        )
+        current_status = record.get("status") or "Not Reviewed"
         if current_status not in statuses:
             current_status = "Not Reviewed"
 
@@ -453,23 +459,18 @@ def show_review_editor(record, workspace_id, user_name):
                 value=record.get("assigned_reviewer") or "",
                 placeholder="Use their exact demo name",
             )
-            submitted = st.form_submit_button(
-                "Save review"
-            )
+            submitted = st.form_submit_button("Save review")
 
         if submitted:
             try:
                 saved = update_review_status(
-                    record,
-                    selected_status,
-                    reviewer,
+                    record, selected_status, reviewer
                 )
                 if saved:
                     st.rerun()
                 else:
                     st.warning(
-                        "This grant changed. Refresh "
-                        "before saving."
+                        "This grant changed. Refresh before saving."
                     )
             except (AzureError, KeyError, ValueError):
                 st.error("Could not save the review.")
@@ -478,18 +479,14 @@ def show_review_editor(record, workspace_id, user_name):
         comments = record.get("comments") or []
 
         if not comments:
-            st.caption(
-                "No discussions yet. Start one below."
-            )
+            st.caption("No discussions yet. Start one below.")
 
         for index, comment in enumerate(comments):
             replies = comment.get("replies") or []
             author = comment.get("author") or "Unknown"
-            original_text = str(
-                comment.get("text") or ""
-            )
-
+            original_text = str(comment.get("text") or "")
             preview = " ".join(original_text.split())
+
             if len(preview) > 85:
                 preview = preview[:82] + "..."
 
@@ -505,9 +502,7 @@ def show_review_editor(record, workspace_id, user_name):
             ):
                 st.text(author)
                 st.caption(
-                    display_timestamp(
-                        comment.get("created_at")
-                    )
+                    display_timestamp(comment.get("created_at"))
                 )
                 st.text(original_text)
 
@@ -517,32 +512,21 @@ def show_review_editor(record, workspace_id, user_name):
 
                 for reply in replies:
                     with st.container(border=True):
-                        st.text(
-                            reply.get("author") or "Unknown"
-                        )
+                        st.text(reply.get("author") or "Unknown")
                         st.caption(
-                            display_timestamp(
-                                reply.get("created_at")
-                            )
+                            display_timestamp(reply.get("created_at"))
                         )
                         st.text(reply.get("text") or "")
 
-                with st.form(
-                    f"reply-{version_key}-{index}"
-                ):
+                with st.form(f"reply-{version_key}-{index}"):
                     st.caption(
                         "Replying as: "
                         + (user_name or "Enter a demo name")
                     )
-                    reply_text = st.text_area(
-                        "Your reply",
-                        height=90,
-                    )
-                    submitted_reply = (
-                        st.form_submit_button(
-                            "Post reply",
-                            disabled=not bool(user_name),
-                        )
+                    reply_text = st.text_area("Your reply", height=90)
+                    submitted_reply = st.form_submit_button(
+                        "Post reply",
+                        disabled=not bool(user_name),
                     )
 
                 if submitted_reply:
@@ -551,24 +535,16 @@ def show_review_editor(record, workspace_id, user_name):
                     else:
                         try:
                             saved = reply_to_comment(
-                                record,
-                                index,
-                                user_name,
-                                reply_text,
+                                record, index, user_name, reply_text
                             )
                             if saved:
                                 st.rerun()
                             else:
                                 st.warning(
-                                    "This discussion changed. "
-                                    "Copy your reply, refresh, "
-                                    "and try again."
+                                    "This discussion changed. Copy "
+                                    "your reply, refresh, and try again."
                                 )
-                        except (
-                            AzureError,
-                            KeyError,
-                            ValueError,
-                        ):
+                        except (AzureError, KeyError, ValueError):
                             st.error(
                                 "Could not save your reply. "
                                 "Copy it before refreshing."
@@ -576,12 +552,10 @@ def show_review_editor(record, workspace_id, user_name):
 
         with st.form(f"comment-{version_key}"):
             st.caption(
-                "Posting as: "
-                + (user_name or "Enter a demo name")
+                "Posting as: " + (user_name or "Enter a demo name")
             )
             comment_text = st.text_area(
-                "Start a new discussion",
-                height=90,
+                "Start a new discussion", height=90
             )
             submitted_comment = st.form_submit_button(
                 "Post comment",
@@ -594,16 +568,14 @@ def show_review_editor(record, workspace_id, user_name):
             else:
                 try:
                     saved = add_comment(
-                        record,
-                        user_name,
-                        comment_text,
+                        record, user_name, comment_text
                     )
                     if saved:
                         st.rerun()
                     else:
                         st.warning(
-                            "This grant changed. Copy your "
-                            "comment, refresh, and try again."
+                            "This grant changed. Copy your comment, "
+                            "refresh, and try again."
                         )
                 except (AzureError, KeyError, ValueError):
                     st.error(
@@ -612,37 +584,32 @@ def show_review_editor(record, workspace_id, user_name):
                     )
 
         open_details_button(
-            grant,
-            f"workspace-details-{grant['id']}",
+            grant, f"workspace-details-{grant['id']}"
         )
 
 
-# LEFT SIDEBAR
+# SIDEBAR
 with st.sidebar:
     st.markdown(
         '<div class="brand-line"></div>',
         unsafe_allow_html=True,
     )
     st.markdown("### Federal Funds Matchmaker")
-    st.caption(
-        "Federal grant discovery & agency collaboration"
-    )
+    st.caption("Federal grant discovery & agency collaboration")
 
     agency_id = st.selectbox(
         "Agency",
         options=list(agencies),
-        format_func=lambda value: (
-            agencies[value]["short_name"]
-        ),
+        format_func=lambda value: agencies[value]["short_name"],
         key="selected_agency",
     )
     agency = agencies[agency_id]
 
     st.divider()
 
-    pages = ["Search", "Workspace", "Dashboard"]
-
-    for index, page in enumerate(pages):
+    for index, page in enumerate(
+        ["Search", "Workspace", "Dashboard"]
+    ):
         if st.button(
             page,
             key=f"navigation-{page}",
@@ -655,233 +622,213 @@ with st.sidebar:
         ):
             navigate(page)
 
-        if index < len(pages) - 1:
+        if index < 2:
             st.divider()
 
     st.divider()
-
     st.markdown("##### Account")
+
     user_name = st.text_input(
         "Demo user name",
         key="demo_user_name",
         placeholder="Enter your name",
     ).strip()
 
-    st.caption(
-        "Demo identity only · Login not connected"
-    )
+    st.caption("Demo identity only · Login not connected")
 
 
 # SEARCH
 if st.session_state.page == "Search":
     st.header("Find funding opportunities")
-    st.write(
-        "Explore grants and share opportunities "
-        "with your agency."
-    )
-    st.caption(
-        f"Selected agency: {agency['name']}"
-    )
+    st.write("Explore grants and share opportunities with your agency.")
+    st.caption(f"Selected agency: {agency['name']}")
 
     st.session_state.setdefault(
-        "search_input",
-        st.session_state.search_text,
+        "search_input", st.session_state.search_text
     )
     keyword = st.text_input(
         "Keywords",
-        placeholder=(
-            "Search by topic, program, or project..."
-        ),
+        placeholder="Search by topic, program, or project...",
         key="search_input",
         on_change=remember_search,
     )
 
-    sort_by = st.selectbox(
-        "Sort results",
-        [
-            "Best keyword match",
-            "Original order",
-            "Title A–Z",
-        ],
-    )
+    filter_left, filter_right = st.columns(2)
 
-    query = keyword.strip().lower()
-    results = [
-        grant
-        for grant in grants
-        if query in (
-            f"{grant.get('title') or ''} "
-            f"{grant.get('description') or ''}"
-        ).lower()
-    ]
-
-    if sort_by == "Best keyword match":
-        results = sorted(
-            results,
-            key=lambda grant: (
-                -match_grant(
-                    grant, agency
-                )["keyword_count"],
-                grant["title"].lower(),
-            ),
+    with filter_left:
+        sort_by = st.selectbox(
+            "Sort results",
+            ["Best keyword match", "Original order", "Title A–Z"],
         )
-    elif sort_by == "Title A–Z":
-        results = sorted(
-            results,
-            key=lambda grant: (
-                grant.get("title", "").lower()
+
+        eligibility_filters = st.multiselect(
+            "Applicant-type assessment — select all that apply",
+            options=ELIGIBILITY_OPTIONS,
+            default=ELIGIBILITY_OPTIONS,
+            help=(
+                "A grant passes this filter if its assessment "
+                "matches any selected option. Clearing all "
+                "options shows no results."
             ),
         )
 
-    deadline_window = st.selectbox(
-        "Deadline",
-        [
-            "Any date",
-            "Next 30 days",
-            "Next 60 days",
-            "Next 90 days",
-        ],
-    )
-    include_unknown = st.checkbox(
-        "Include unknown or unrecognized deadlines",
-        value=True,
-    )
-    hide_past = st.checkbox(
-        "Hide grants past their closing date",
-        value=True,
-    )
+    with filter_right:
+        deadline_window = st.selectbox(
+            "Deadline",
+            ["Any date", "Next 30 days", "Next 60 days", "Next 90 days"],
+        )
 
-    today = datetime.now(
-        ZoneInfo("America/New_York")
-    ).date()
+        known_amounts = [
+            value
+            for grant in grants
+            for value in award_bounds(grant)
+            if value is not None
+        ]
+        slider_maximum = float(
+            max(1, math.ceil(max(known_amounts, default=1000000)))
+        )
 
+        budget_range = st.slider(
+            "Award amount range (USD)",
+            min_value=0.0,
+            max_value=slider_maximum,
+            value=(0.0, slider_maximum),
+            step=1.0,
+            format="$%.0f",
+            help=(
+                "Includes grants whose stated award range overlaps "
+                "your selection. A missing lower or upper bound "
+                "is treated as open for filtering."
+            ),
+        )
+        st.caption(
+            f"${budget_range[0]:,.0f} – ${budget_range[1]:,.0f}"
+        )
+
+    option_left, option_middle, option_right = st.columns(3)
+    with option_left:
+        include_unknown_deadlines = st.checkbox(
+            "Include unknown deadlines", value=True
+        )
+    with option_middle:
+        include_unknown_amounts = st.checkbox(
+            "Include unknown award amounts", value=True
+        )
+    with option_right:
+        hide_past = st.checkbox(
+            "Hide past closing dates", value=True
+        )
+
+    today = datetime.now(ZoneInfo("America/New_York")).date()
     maximum_days = {
         "Next 30 days": 30,
         "Next 60 days": 60,
         "Next 90 days": 90,
     }.get(deadline_window)
 
-    filtered = []
+    query = keyword.strip().lower()
+    matches = {
+        str(grant["id"]): match_grant(grant, agency)
+        for grant in grants
+    }
+    results = []
 
-    for grant in results:
+    for grant in grants:
+        searchable = (
+            f"{grant.get('title') or ''} "
+            f"{grant.get('description') or ''} "
+            f"{grant.get('opportunity_number') or ''} "
+            f"{grant.get('funder') or ''}"
+        ).lower()
+
+        if query not in searchable:
+            continue
+
+        assessment = matches[str(grant["id"])]["eligibility"]["status"]
+        if assessment not in eligibility_filters:
+            continue
+
+        if not budget_matches(
+            grant, budget_range, include_unknown_amounts
+        ):
+            continue
+
         closing_date = deadline_date(grant)
-
         if closing_date is None:
-            if include_unknown:
-                filtered.append(grant)
-            continue
-
-        days_left = (closing_date - today).days
-
-        if hide_past and days_left < 0:
-            continue
-
-        if maximum_days is not None:
-            if not 0 <= days_left <= maximum_days:
+            if not include_unknown_deadlines:
                 continue
+        else:
+            days_left = (closing_date - today).days
+            if hide_past and days_left < 0:
+                continue
+            if maximum_days is not None:
+                if not 0 <= days_left <= maximum_days:
+                    continue
 
-        filtered.append(grant)
+        results.append(grant)
 
-    results = filtered
+    if sort_by == "Best keyword match":
+        results.sort(
+            key=lambda grant: (
+                -matches[str(grant["id"])]["keyword_count"],
+                grant["title"].lower(),
+            )
+        )
+    elif sort_by == "Title A–Z":
+        results.sort(
+            key=lambda grant: grant.get("title", "").lower()
+        )
 
-    eligibility_filter = st.selectbox(
-        "Applicant-type filter",
-        [
-            "Show all",
-            "Applicant type matches",
-            "Needs verification",
-            "Applicant type does not match",
-        ],
-    )
-
-    if eligibility_filter != "Show all":
-        results = [
-            grant
-            for grant in results
-            if match_grant(
-                grant, agency
-            )["eligibility"]["status"]
-            == eligibility_filter
-        ]
-
+    st.divider()
     st.subheader("Grant opportunities")
     st.caption(f"{len(results)} results")
 
     if not results:
-        st.info(
-            "No matches. Adjust your keywords or filters."
-        )
+        st.info("No matches. Adjust your keywords or filters.")
 
     for grant in results:
-        match = match_grant(grant, agency)
+        match = matches[str(grant["id"])]
 
         with st.container(border=True):
             main, relevance = st.columns([4, 1])
 
             with main:
                 st.subheader(grant["title"])
-                st.caption(
-                    grant.get("funder")
-                    or "Funder not stated"
-                )
+                st.caption(grant.get("funder") or "Funder not stated")
                 st.write(
                     "**Funding opportunity number:** "
-                    + str(
-                        grant.get("opportunity_number")
-                        or "Not stated"
-                    )
+                    + str(grant.get("opportunity_number") or "Not stated")
                 )
-
-                if grant.get("source_url"):
-                    st.link_button(
-                        "Open original posting ↗",
-                        grant["source_url"],
-                    )
 
             with relevance:
                 st.caption("Keyword matches")
-                st.write(
-                    str(match["keyword_count"])
-                )
+                st.write(str(match["keyword_count"]))
 
-            funding_column, deadline_column = (
-                st.columns(2)
-            )
-
+            funding_column, deadline_column = st.columns(2)
             with funding_column:
                 st.write("**Award amount**")
                 st.write(funding_label(grant))
-
             with deadline_column:
                 st.write("**Deadline**")
                 st.write(deadline_label(grant))
 
-            st.write(
-                "**Eligibility:** "
-                + (
-                    grant.get("eligibility_text")
-                    or "Not stated"
-                )
-            )
-            st.write(
-                grant.get("description")
-                or "Not stated"
-            )
-
             st.write("**Why this matches**")
             st.write(match["reason"])
-            st.write(
-                "**Applicant-type check:** "
-                + match["eligibility"]["status"]
-            )
+
+            st.write("**Eligibility summary**")
+            st.write(eligibility_summary(grant))
             st.caption(
-                match["eligibility"]["reason"]
+                "Applicant-type check: "
+                + match["eligibility"]["status"]
+                + " · See Details for full conditions."
             )
 
-            favorite_col, share_col, detail_col = (
-                st.columns(3)
-            )
+            if grant.get("source_url"):
+                st.link_button(
+                    "Open original posting ↗", grant["source_url"]
+                )
 
+            favorite_col, share_col, detail_col = st.columns(3)
             with favorite_col:
                 favorite_button(
                     grant,
@@ -889,18 +836,15 @@ if st.session_state.page == "Search":
                     agency_id,
                     user_name,
                 )
-
             with share_col:
                 share_button(
                     grant,
                     f"share-search-{grant['id']}",
                     agency_id,
                 )
-
             with detail_col:
                 open_details_button(
-                    grant,
-                    f"details-search-{grant['id']}",
+                    grant, f"details-search-{grant['id']}"
                 )
 
     show_data_footer()
@@ -908,118 +852,93 @@ if st.session_state.page == "Search":
 
 # GRANT DETAILS
 elif st.session_state.page == "Grant Details":
-    grant = st.session_state.selected_grant
+    selected_grant = st.session_state.selected_grant
 
-    if grant is None:
-        st.info(
-            "Open a grant from Search, "
-            "Workspace, or Dashboard."
-        )
+    if selected_grant is None:
+        st.info("Open a grant from Search, Workspace, or Dashboard.")
     else:
+        grant = grants_by_id.get(
+            str(selected_grant["id"]), selected_grant
+        )
+        match = match_grant(grant, agency)
+
         if st.button("← Back to search"):
             navigate("Search")
 
         st.header(grant["title"])
-        facts, content = st.columns([1, 2])
+        st.caption(grant.get("funder") or "Funder not stated")
+
+        facts, assessment = st.columns([1, 2])
 
         with facts:
             with st.container(border=True):
                 st.subheader("Key information")
-
+                st.write("**Funding opportunity number**")
                 st.write(
-                    "**Funding opportunity number**"
+                    grant.get("opportunity_number") or "Not stated"
                 )
-                st.write(
-                    grant.get("opportunity_number")
-                    or "Not stated"
-                )
-
-                st.write("**Funder**")
-                st.write(
-                    grant.get("funder")
-                    or "Not stated"
-                )
-
                 st.write("**Award amount**")
                 st.write(funding_label(grant))
-
                 st.write("**Deadline**")
                 st.write(deadline_label(grant))
-
-                st.write("**Eligibility**")
-                st.write(
-                    grant.get("eligibility_text")
-                    or "Not stated"
-                )
-                st.caption(
-                    "Verify against the official notice."
-                )
-
                 show_source(grant)
-
                 favorite_button(
-                    grant,
-                    "favorite-detail",
-                    agency_id,
-                    user_name,
+                    grant, "favorite-detail", agency_id, user_name
                 )
-                share_button(
-                    grant,
-                    "share-detail",
-                    agency_id,
-                )
+                share_button(grant, "share-detail", agency_id)
 
-        with content:
+        with assessment:
             with st.container(border=True):
-                st.subheader("Overview")
-                st.write(
-                    grant.get("description")
-                    or "Not stated"
-                )
-
-                if grant.get("detail_status") in {
-                    "stale",
-                    "unavailable",
-                }:
-                    st.warning(
-                        "Full details were not refreshed "
-                        "successfully. Check the "
-                        "original announcement."
-                    )
-
-                st.subheader(
-                    "Application requirements"
-                )
-                show_requirements(
-                    grant.get("requirements")
-                )
-
                 st.subheader("Why this matches")
-                match = match_grant(
-                    grant, agency
-                )
                 st.write(match["reason"])
 
                 for evidence in match["priority_matches"]:
-                    st.write(
-                        f"**{evidence['priority_title']}**"
-                    )
+                    st.write(f"**{evidence['priority_title']}**")
                     st.write(
                         "Matched terms: "
-                        + ", ".join(
-                            evidence["matched_keywords"]
-                        )
+                        + ", ".join(evidence["matched_keywords"])
                     )
 
-                st.subheader(
-                    "Applicant-type check"
-                )
-                st.write(
-                    match["eligibility"]["status"]
-                )
-                st.caption(
-                    match["eligibility"]["reason"]
-                )
+                st.subheader("Applicant-type check")
+                st.write(match["eligibility"]["status"])
+                st.caption(match["eligibility"]["reason"])
+
+                st.subheader("Application requirements")
+                show_requirements(grant.get("requirements"))
+
+                if grant.get("matching_funds_text"):
+                    st.write("**Matching funds**")
+                    st.write(grant["matching_funds_text"])
+
+        st.divider()
+
+        if grant.get("detail_status") in {"stale", "unavailable"}:
+            st.warning(
+                "Full details were not refreshed successfully. "
+                "Check the original announcement."
+            )
+
+        with st.container(border=True):
+            st.subheader("Detailed description")
+            st.write(grant.get("description") or "Not stated")
+
+        with st.container(border=True):
+            st.subheader("Full eligibility information")
+            st.write("**Listed applicant categories**")
+            st.write(
+                grant.get("eligibility_text") or "Not stated"
+            )
+
+            st.write("**Additional eligibility information**")
+            st.write(
+                grant.get("additional_eligibility_text")
+                or "Not available in this snapshot. "
+                   "Check the official announcement."
+            )
+            st.caption(
+                "Applicant-category matching does not establish "
+                "full eligibility. Additional restrictions may apply."
+            )
 
 
 # WORKSPACE
@@ -1028,7 +947,6 @@ elif st.session_state.page == "Workspace":
     st.caption(agency["name"])
 
     st.markdown("#### Agency priorities")
-
     for priority in agency["priorities"]:
         if priority.get("enabled", True):
             st.markdown(
@@ -1039,7 +957,6 @@ elif st.session_state.page == "Workspace":
     st.divider()
     st.subheader("Shared grants")
     st.button("Refresh workspace")
-
     records = load_workspace(agency_id)
 
     if records is not None:
@@ -1051,16 +968,14 @@ elif st.session_state.page == "Workspace":
 
         if not show_passed:
             records = [
-                record
-                for record in records
+                record for record in records
                 if record.get("status") != "Pass"
             ]
 
         if not records:
             st.info(
-                "No active shared grants. "
-                "Share one from Search or "
-                "enable Show passed grants."
+                "No active shared grants. Share one from Search "
+                "or enable Show passed grants."
             )
         else:
             st.dataframe(
@@ -1068,9 +983,7 @@ elif st.session_state.page == "Workspace":
                     {
                         "Grant": record["grant"]["title"],
                         "Opportunity number": (
-                            record["grant"].get(
-                                "opportunity_number"
-                            )
+                            record["grant"].get("opportunity_number")
                             or "Not stated"
                         ),
                         "Deadline": (
@@ -1078,8 +991,7 @@ elif st.session_state.page == "Workspace":
                             or "Not stated"
                         ),
                         "Status": (
-                            record.get("status")
-                            or "Not Reviewed"
+                            record.get("status") or "Not Reviewed"
                         ),
                         "Reviewer": (
                             record.get("assigned_reviewer")
@@ -1093,13 +1005,8 @@ elif st.session_state.page == "Workspace":
             )
 
             st.subheader("Review shared grants")
-
             for record in records:
-                show_review_editor(
-                    record,
-                    agency_id,
-                    user_name,
-                )
+                show_review_editor(record, agency_id, user_name)
 
 
 # DASHBOARD
@@ -1109,100 +1016,65 @@ elif st.session_state.page == "Dashboard":
 
     if not user_name:
         st.info(
-            "Enter a demo user name in the sidebar "
-            "to view your assignments and favorites."
+            "Enter a demo user name in the sidebar to view "
+            "your assignments and favorites."
         )
     else:
-        st.write(
-            f"Welcome, **{user_name}**."
-        )
+        st.write(f"Welcome, **{user_name}**.")
         st.caption(
-            "Assignments match your demo name. "
-            "This view is not protected "
-            "by real authentication."
+            "Demo identity only; real authentication is not connected."
         )
         st.button("Refresh dashboard")
-
         records = load_workspace(agency_id)
 
         try:
-            favorites = list_favorites(
-                agency_id, user_name
-            )
+            favorites = list_favorites(agency_id, user_name)
         except (AzureError, KeyError, ValueError):
-            st.error(
-                "Could not load favorites from Azure."
-            )
+            st.error("Could not load favorites from Azure.")
             favorites = None
 
         if records is not None:
             my_records = [
-                record
-                for record in records
-                if identity_key(
-                    record.get("assigned_reviewer")
-                ) == identity_key(user_name)
+                record for record in records
+                if identity_key(record.get("assigned_reviewer"))
+                == identity_key(user_name)
             ]
-
             my_todos = [
-                record
-                for record in my_records
+                record for record in my_records
                 if record.get("status") != "Pass"
             ]
-
             my_todos.sort(
                 key=lambda record: (
-                    deadline_date(
-                        record["grant"]
-                    ) is None,
+                    deadline_date(record["grant"]) is None,
                     deadline_date(record["grant"])
                     or datetime.max.date(),
                 )
             )
 
-            cutoff = (
-                datetime.now(timezone.utc)
-                - timedelta(days=7)
-            )
-
+            cutoff = datetime.now(timezone.utc) - timedelta(days=7)
             new_records = [
-                record
-                for record in records
-                if parsed_timestamp(
-                    record.get("shared_at")
-                )
-                and parsed_timestamp(
-                    record["shared_at"]
-                ) >= cutoff
+                record for record in records
+                if parsed_timestamp(record.get("shared_at"))
+                and parsed_timestamp(record["shared_at"]) >= cutoff
             ]
             new_records.sort(
-                key=lambda record: (
-                    record.get("shared_at", "")
-                ),
+                key=lambda record: record.get("shared_at", ""),
                 reverse=True,
             )
 
-            # Include original comments and replies
-            # from others on currently assigned grants.
             received_comments = []
-
             for record in my_records:
                 for original in record.get("comments") or []:
                     messages = [
                         (original, "Comment"),
                         *[
                             (reply, "Reply")
-                            for reply in (
-                                original.get("replies") or []
-                            )
+                            for reply in original.get("replies") or []
                         ],
                     ]
-
                     for message, message_type in messages:
                         if (
-                            identity_key(
-                                message.get("author")
-                            )
+                            identity_key(message.get("author"))
                             != identity_key(user_name)
                         ):
                             received_comments.append({
@@ -1216,227 +1088,142 @@ elif st.session_state.page == "Dashboard":
                     parsed_timestamp(
                         item["comment"].get("created_at")
                     )
-                    or datetime.min.replace(
-                        tzinfo=timezone.utc
-                    )
+                    or datetime.min.replace(tzinfo=timezone.utc)
                 ),
                 reverse=True,
             )
 
             metrics = st.columns(4)
-
-            metrics[0].metric(
-                "Assigned reviews",
-                len(my_todos),
-            )
+            metrics[0].metric("Assigned reviews", len(my_todos))
             metrics[1].metric(
-                "Shared in last 7 days",
-                len(new_records),
+                "Shared in last 7 days", len(new_records)
             )
             metrics[2].metric(
                 "Favorites",
-                (
-                    len(favorites)
-                    if favorites is not None
-                    else "—"
-                ),
+                len(favorites) if favorites is not None else "—",
             )
             metrics[3].metric(
-                "Comments & replies",
-                len(received_comments),
+                "Comments & replies", len(received_comments)
             )
 
             st.divider()
             st.subheader("My to-dos")
             st.caption(
-                "Assigned grants you have not marked Pass. "
-                "These are review assignments, "
-                "not a separate task list."
+                "Assigned grants not marked Pass, ordered by deadline."
             )
 
             if not my_todos:
-                st.info(
-                    "No active assignments. "
-                    "Assign a shared grant to your "
-                    "demo name in Workspace."
-                )
+                st.info("No active assignments.")
 
             for record in my_todos:
                 grant = record["grant"]
-
                 with st.container(border=True):
-                    st.markdown(
-                        f"**{grant['title']}**"
-                    )
+                    st.markdown(f"**{grant['title']}**")
                     st.write(
                         "Status: "
-                        + (
-                            record.get("status")
-                            or "Not Reviewed"
-                        )
+                        + (record.get("status") or "Not Reviewed")
                     )
-                    st.write(
-                        f"Deadline: {deadline_label(grant)}"
-                    )
+                    st.write(f"Deadline: {deadline_label(grant)}")
 
-                    detail_col, workspace_col = (
-                        st.columns(2)
-                    )
-
+                    detail_col, workspace_col = st.columns(2)
                     with detail_col:
                         open_details_button(
-                            grant,
-                            f"todo-detail-{grant['id']}",
+                            grant, f"todo-detail-{grant['id']}"
                         )
-
                     with workspace_col:
                         if st.button(
                             "Manage in workspace",
-                            key=(
-                                f"todo-manage-{grant['id']}"
-                            ),
+                            key=f"todo-manage-{grant['id']}",
                         ):
                             navigate("Workspace")
 
             st.divider()
-            st.subheader(
-                "Newly shared to your agency"
-            )
+            st.subheader("Newly shared to your agency")
             st.caption(
-                "Added to Workspace in the last 7 days. "
-                "This is not the grant's "
-                "original publication date."
+                "Added to Workspace in the last 7 days, "
+                "not necessarily newly published."
             )
 
             if not new_records:
-                st.info(
-                    "No grants shared in the last 7 days."
-                )
+                st.info("No grants shared in the last 7 days.")
 
             for record in new_records:
                 grant = record["grant"]
-
                 with st.container(border=True):
-                    st.markdown(
-                        f"**{grant['title']}**"
-                    )
+                    st.markdown(f"**{grant['title']}**")
                     st.caption(
                         "Shared: "
-                        + display_timestamp(
-                            record.get("shared_at")
-                        )
+                        + display_timestamp(record.get("shared_at"))
                     )
                     st.write(
                         "Status: "
-                        + (
-                            record.get("status")
-                            or "Not Reviewed"
-                        )
+                        + (record.get("status") or "Not Reviewed")
                     )
                     open_details_button(
-                        grant,
-                        f"new-detail-{grant['id']}",
+                        grant, f"new-detail-{grant['id']}"
                     )
 
             st.divider()
-            st.subheader(
-                "Discussion on grants assigned to me"
-            )
+            st.subheader("Discussion on grants assigned to me")
             st.caption(
-                "Comments and replies from others "
-                "on your current assignments. "
-                "Read/unread tracking is not implemented."
+                "Comments and replies from others on current "
+                "assignments. Read/unread tracking is not connected."
             )
 
             if not received_comments:
-                st.info(
-                    "No comments or replies from others "
-                    "on your assignments."
-                )
+                st.info("No discussion activity from others.")
 
             for index, item in enumerate(received_comments):
                 grant = item["grant"]
                 message = item["comment"]
-
                 with st.container(border=True):
-                    st.markdown(
-                        f"**{grant['title']}**"
-                    )
+                    st.markdown(f"**{grant['title']}**")
                     st.caption(item["type"])
                     st.text(
-                        f"{message.get('author') or 'Unknown'}"
-                        " · "
-                        + display_timestamp(
-                            message.get("created_at")
-                        )
+                        f"{message.get('author') or 'Unknown'} · "
+                        + display_timestamp(message.get("created_at"))
                     )
-                    st.text(
-                        message.get("text") or ""
-                    )
-
+                    st.text(message.get("text") or "")
                     if st.button(
                         "Open workspace discussion",
-                        key=(
-                            f"comment-open-{index}-"
-                            f"{grant['id']}"
-                        ),
+                        key=f"comment-open-{index}-{grant['id']}",
                     ):
                         navigate("Workspace")
 
         st.divider()
         st.subheader("My favorites")
         st.caption(
-            "Favorites for this agency and demo identity, "
-            "saved in Azure."
+            "Favorites for this agency and demo identity, saved in Azure."
         )
 
         if favorites is not None:
             if not favorites:
-                st.info(
-                    "No favorites yet. "
-                    "Use ☆ Favorite on a grant."
-                )
+                st.info("No favorites yet. Use ☆ Favorite on a grant.")
 
             for favorite in favorites:
                 saved_grant = favorite["grant"]
                 grant = grants_by_id.get(
-                    str(saved_grant["id"]),
-                    saved_grant,
+                    str(saved_grant["id"]), saved_grant
                 )
 
                 with st.container(border=True):
-                    st.markdown(
-                        f"**{grant['title']}**"
-                    )
-                    st.write(
-                        funding_label(grant)
-                    )
-                    st.write(
-                        deadline_label(grant)
-                    )
+                    st.markdown(f"**{grant['title']}**")
+                    st.write(funding_label(grant))
+                    st.write(deadline_label(grant))
                     st.caption(
                         "Favorited: "
-                        + display_timestamp(
-                            favorite.get("saved_at")
-                        )
+                        + display_timestamp(favorite.get("saved_at"))
                     )
 
-                    detail_col, remove_col = (
-                        st.columns(2)
-                    )
-
+                    detail_col, remove_col = st.columns(2)
                     with detail_col:
                         open_details_button(
-                            grant,
-                            f"favorite-detail-{grant['id']}",
+                            grant, f"favorite-detail-{grant['id']}"
                         )
-
                     with remove_col:
                         if st.button(
                             "Remove favorite",
-                            key=(
-                                f"favorite-remove-{grant['id']}"
-                            ),
+                            key=f"favorite-remove-{grant['id']}",
                         ):
                             try:
                                 get_container().get_blob_client(
@@ -1446,6 +1233,4 @@ elif st.session_state.page == "Dashboard":
                             except ResourceNotFoundError:
                                 st.rerun()
                             except AzureError:
-                                st.error(
-                                    "Could not remove favorite."
-                                )
+                                st.error("Could not remove favorite.")
