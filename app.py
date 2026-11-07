@@ -49,3 +49,52 @@ st.write(f"**Eligibility:** {grant['eligibility_text']}")
 
 if grant.get("source_url"):
     st.link_button("View original posting", grant["source_url"])
+
+st.divider()
+
+if st.button("Share to agency workspace"):
+    try:
+        created = share_grant(grant)
+
+        if created:
+            st.success("Grant shared successfully!")
+        else:
+            st.info("This grant is already in the workspace.")
+    except (AzureError, KeyError, ValueError):
+        st.error(
+            "Could not save to Azure. Check the connection "
+            "and try again."
+        )
+
+st.header("Agency workspace")
+st.caption(
+    "Demo: one shared agency workspace. Login is not connected yet."
+)
+
+st.button("Refresh workspace")
+
+try:
+    shared_records = list_shared_grants()
+except (AzureError, KeyError, ValueError):
+    st.error("Could not load the workspace from Azure.")
+    shared_records = None
+
+if shared_records is not None:
+    if not shared_records:
+        st.info("No grants shared yet.")
+
+    for record in shared_records:
+        saved_grant = record["grant"]
+
+        with st.expander(saved_grant["title"]):
+            st.write(
+                f"**Funder:** {saved_grant.get('funder') or 'Not stated'}"
+            )
+            st.write(f"**Status:** {record['status']}")
+            st.write(
+                saved_grant.get("description") or "Not stated"
+            )
+            st.write(
+                f"**Deadline:** "
+                f"{saved_grant.get('deadline') or 'Not stated'}"
+            )
