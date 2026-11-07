@@ -84,3 +84,38 @@
 * **Alignment with Agency Priority:**
   * **Supported Priority:** Priority 1 (Protection of Water Resources and Water Quality Management)
   * **Justification/Interpretation:** Provides planning grants to regional organizations to identify non-point source pollution, protect watersheds, and safeguard drinking water quality.
+## 2. North Carolina Department of Agriculture and Consumer Services (NCDA&CS)
+- **Primary Focus:** Agricultural economy, farmland preservation, bioenergy research, and food supply protection.
+- **Key Priorities:**
+  1. Agricultural Research & Innovative Production Technologies
+  2. Agricultural Development & Farmland Preservation Trust Fund
+  3. Bioenergy & Forestry-Based Material Innovation
+  4. Agribusiness Site & Infrastructure Grants
+  5. Specialty Crop Block Grants & Local Food Infrastructure
+
+## 3. North Carolina Department of Transportation (NCDOT)
+- **Primary Focus:** Transportation network planning, multi-modal infrastructure, EV charging, and transit modernizations.
+- **Key Priorities:**
+  1. EV Charging Infrastructure & Fleet Electrification (NEVI)
+  2. Stormwater Mitigation & Flood Resilience along Highway Corridors
+  3. Rural Public Transit & Workforce Mobility Modernization
+  4. Active Transportation (Bicycle & Pedestrian Infrastructure)
+  5. Rail & Multi-Modal Freight Logistics Upgrades
+
+## 4. North Carolina Department of Natural and Cultural Resources (DNCR)
+- **Primary Focus:** Land conservation, state parks, public libraries, outdoor recreation, and cultural stewardship.
+- **Key Priorities:**
+  1. Parks and Recreation Trust Fund (PARTF) Acquisition & Facilities
+  2. Public Library Infrastructure & Digital Equity (LSTA Grants)
+  3. Historic Preservation & Resilient Cultural Heritage Sites
+  4. Land and Water Conservation Fund (LWCF) Access Points
+  5. Eco-Tourism & Regional Outdoor Infrastructure
+
+## 5. North Carolina Department of Commerce (NC Commerce)
+- **Primary Focus:** Regional economic health, downtown revitalization, community development, and workforce training.
+- **Key Priorities:**
+  1. Community Development Block Grants (CDBG) - Public Infrastructure
+  2. Rural Transformation Grant Fund & Downtown Revitalization
+  3. Industrial Site & Building Reuse/Demolition Grants
+  4. NCEdge Customized Workforce Training Grants
+  5. One North Carolina Fund Infrastructure Incentives
