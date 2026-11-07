@@ -23,7 +23,6 @@ DEFAULT_TOPICS = [
 
 def api_call(endpoint, payload):
     for attempt in range(3):
-        # Space out requests, including retries.
         time.sleep(1)
 
         try:
@@ -80,7 +79,6 @@ def collect_hits(topics, rows):
         for topic in topics
     ]
 
-    # Supplement topic searches with a broader applicant-type search.
     searches.append({
         "label": "State-government applicants",
         "keyword": "",
@@ -126,8 +124,6 @@ def collect_hits(topics, rows):
 
 
 def fetch_grants(topics, rows=10):
-    # Complete all searches before retrieving details.
-    # A failed search aborts without replacing the snapshot.
     unique_hits = collect_hits(topics, rows)
 
     output = Path(__file__).parent / "data" / "grants-live.json"
@@ -173,8 +169,11 @@ def fetch_grants(topics, rows=10):
             details_retrieved = True
 
         except (requests.RequestException, ValueError):
+            synopsis = {}
             detail_failures += 1
-            print("  Details unavailable; retaining prior details if any.")
+            print(
+                "  Details unavailable; retaining prior details if any."
+            )
 
         if details_retrieved:
             applicant_types = synopsis.get("applicantTypes") or []
@@ -185,7 +184,13 @@ def fetch_grants(topics, rows=10):
                 if item.get("description")
             )
 
-            description = clean_text(synopsis.get("synopsisDesc"))
+            additional_eligibility_text = clean_text(
+                synopsis.get("applicantEligibilityDesc")
+            ) or None
+
+            description = clean_text(
+                synopsis.get("synopsisDesc")
+            )
             award_min = amount(synopsis.get("awardFloor"))
             award_max = amount(synopsis.get("awardCeiling"))
             detail_status = "retrieved"
@@ -194,13 +199,14 @@ def fetch_grants(topics, rows=10):
         else:
             applicant_types = old.get("applicant_types_raw") or []
             eligibility_text = old.get("eligibility_text")
+            additional_eligibility_text = old.get(
+                "additional_eligibility_text"
+            )
             description = old.get("description") or ""
             award_min = old.get("award_min")
             award_max = old.get("award_max")
             details_fetched_at = old.get("details_fetched_at")
-            detail_status = (
-                "stale" if old else "unavailable"
-            )
+            detail_status = "stale" if old else "unavailable"
 
         records.append({
             "id": record_id,
@@ -222,8 +228,9 @@ def fetch_grants(topics, rows=10):
             "award_max": award_max,
             "eligible_applicant_types": None,
             "eligibility_text": eligibility_text or "Not stated",
+            "additional_eligibility_text": additional_eligibility_text,
             "applicant_types_raw": applicant_types,
-            "requirements": None,
+            "requirements": old.get("requirements"),
             "source_url": (
                 "https://www.grants.gov/search-results-detail/"
                 + opportunity_id
@@ -265,10 +272,8 @@ if __name__ == "__main__":
 
     try:
         records = fetch_grants(topics, rows=args.rows)
-
         if not records:
             raise ValueError("No opportunities returned")
-
     except (requests.RequestException, ValueError) as error:
         raise SystemExit(
             f"Refresh failed: {error}\n"
@@ -276,6 +281,7 @@ if __name__ == "__main__":
         )
 
     output = Path(__file__).parent / "data" / "grants-live.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".tmp")
 
     temporary.write_text(
