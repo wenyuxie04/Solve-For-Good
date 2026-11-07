@@ -132,3 +132,50 @@ def add_comment(record, author, text):
         return True
     except ResourceModifiedError:
         return False
+
+def reply_to_comment(record, comment_index, author, text):
+    author = author.strip()
+    text = text.strip()
+
+    if not author or not text:
+        raise ValueError("Name and reply are required")
+
+    # Copy the record without modifying the displayed version.
+    updated = json.loads(json.dumps({
+        key: value
+        for key, value in record.items()
+        if not key.startswith("_")
+    }))
+
+    comments = updated.get("comments") or []
+
+    if not 0 <= comment_index < len(comments):
+        raise ValueError("Original comment not found")
+
+    replies = comments[comment_index].get("replies") or []
+    replies.append({
+        "author": author,
+        "text": text,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    comments[comment_index]["replies"] = replies
+    updated["comments"] = comments
+    updated["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    blob = get_container().get_blob_client(record["_blob_name"])
+
+    try:
+        blob.upload_blob(
+            json.dumps(
+                updated, ensure_ascii=False
+            ).encode("utf-8"),
+            overwrite=True,
+            etag=record["_etag"],
+            match_condition=MatchConditions.IfNotModified,
+            content_settings=ContentSettings(
+                content_type="application/json"
+            ),
+        )
+        return True
+    except ResourceModifiedError:
+        return False
