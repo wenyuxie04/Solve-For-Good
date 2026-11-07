@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "id": "nc-deq",
+  "name": "North Carolina Department of Environmental Quality",
+  "short_name": "NC DEQ",
+  "applicant_type": "state_government",
+  "state": "North Carolina",
+  "mission": "Providing science-based environmental stewardship for the health and prosperity of all North Carolinians.",
+  "priorities": [
+    {
+      "id": "water-quality",
+      "title": "Water Resources and Water Quality",
+      "description": "Protect water resources, improve water quality, and reduce exposure to pathogens, toxins, nutrients, and PFAS.",
+      "keywords": [
+        "water quality",
+        "drinking water",
+        "wastewater",
+        "water infrastructure",
+        "watershed",
+        "groundwater",
+        "PFAS",
+        "pathogens",
+        "toxins",
+        "nutrients"
+      ],
+      "source_url": "https://www.osbm.nc.gov/strategic-plan-deq/open",
+      "source_sections": [
+        "Objective 1.A",
+        "Goal 3"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "community-resilience",
+      "title": "Community Resilience and Flood Mitigation",
+      "description": "Support community recovery, resilience to natural hazards and extreme weather, and flood resilience planning.",
+      "keywords": [
+        "resilience",
+        "flood mitigation",
+        "flood resilience",
+        "natural hazards",
+        "disaster recovery",
+        "extreme weather",
+        "nature-based solutions"
+      ],
+      "source_url": "https://www.osbm.nc.gov/strategic-plan-deq/open",
+      "source_sections": [
+        "Objective 2.A",
+        "Objective 2.B",
+        "Objective 2.C"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "waste-and-land",
+      "title": "Waste Reduction and Land Remediation",
+      "description": "Improve waste management, encourage waste reduction and recovery, and support safe redevelopment of contaminated land.",
+      "keywords": [
+        "solid waste",
+        "hazardous waste",
+        "recycling",
+        "waste reduction",
+        "materials recovery",
+        "brownfields",
+        "remediation",
+        "contaminated sites",
+        "pollution prevention"
+      ],
+      "source_url": "https://www.osbm.nc.gov/strategic-plan-deq/open",
+      "source_sections": [
+        "Objective 1.C",
+        "Objective 1.E"
+      ],
+      "enabled": true
+    },
+    {
+      "id": "environmental-infrastructure",
+      "title": "Environmental Infrastructure and Community Capacity",
+      "description": "Strengthen reliable and resilient environmental infrastructure and support long-term viability planning for distressed local government units.",
+      "keywords": [
+        "environmental infrastructure",
+        "water infrastructure",
+        "utilities",
+        "distressed communities",
+        "infrastructure planning",
+        "technical assistance",
+        "capacity building"
+      ],
+      "source_url": "https://www.osbm.nc.gov/strategic-plan-deq/open",
+      "source_sections": [
+        "Objective 4.A",
+        "Objective 4.B",
+        "Objective 4.C"
+      ],
+      "enabled": true
+    }
+  ],
+  "pending_priorities": [
+    {
+      "id": "clean-energy",
+      "title": "Energy Efficiency and Clean Energy",
+      "enabled": false,
+      "verification_note": "Verify a DEQ-specific source before including this priority in matching. The previously supplied climate report belongs to NC DNCR."
+    }
+  ],
+  "matching_rules": {
+    "separate_relevance_from_eligibility": true,
+    "unknown_eligibility_requires_review": true,
+    "agency_administering_a_grant_does_not_establish_applicant_eligibility": true
+  }
+}
