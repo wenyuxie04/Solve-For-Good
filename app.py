@@ -209,7 +209,23 @@ if st.session_state.page == "Search":
             results,
             key=lambda grant: grant.get("title", "").lower(),
         )
+    eligibility_filter = st.selectbox(
+        "Applicant-type filter",
+        [
+            "Show all",
+            "Applicant type matches",
+            "Needs verification",
+            "Applicant type does not match",
+        ],
+    )
 
+    if eligibility_filter != "Show all":
+        results = [
+            grant
+            for grant in results
+            if match_grant(grant, agency)["eligibility"]["status"]
+            == eligibility_filter
+        ]
     st.subheader("Grant opportunities")
     st.caption(f"{len(results)} results")
 
