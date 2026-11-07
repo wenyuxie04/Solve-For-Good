@@ -1,100 +1,301 @@
 import json
 from pathlib import Path
-from azure.core.exceptions import AzureError
-from storage import share_grant, list_shared_grants
 
 import streamlit as st
+from azure.core.exceptions import AzureError
 
-st.set_page_config(page_title="Grant Finder", layout="wide")
+from storage import share_grant, list_shared_grants
 
-st.title("Grant Finder")
-st.caption("Prototype · Fictional demo grants")
+
+st.set_page_config(
+    page_title="Federal Funds Matchmaker",
+    layout="wide",
+)
+
+st.markdown(
+    """
+    <style>
+    .block-container {
+        max-width: 1150px;
+        padding-top: 2rem;
+    }
+    h1 {
+        font-size: 2rem !important;
+        letter-spacing: -0.04em;
+    }
+    h2, h3 {
+        letter-spacing: -0.02em;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 14px;
+    }
+    .brand-line {
+        height: 5px;
+        width: 64px;
+        background: #7BAFD4;
+        border-radius: 4px;
+        margin-bottom: 16px;
+    }
+    </style>
+    <div class="brand-line"></div>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.title("Federal Funds Matchmaker")
+st.caption("Federal grant discovery & agency collaboration")
 
 data_path = Path(__file__).parent / "data" / "grants.json"
 
 with data_path.open(encoding="utf-8") as file:
     grants = json.load(file)
 
-keyword = st.text_input("Search grants", placeholder="Try water")
+st.session_state.setdefault("page", "Search")
+st.session_state.setdefault("selected_grant", None)
+st.session_state.setdefault("search_text", "")
 
-results = [
-    grant
-    for grant in grants
-    if keyword.lower()
-    in f"{grant['title']} {grant['description']}".lower()
-]
 
-st.write(f"{len(results)} opportunities found")
+def navigate(page, grant=None):
+    st.session_state.page = page
+    if grant is not None:
+        st.session_state.selected_grant = grant
+    st.rerun()
 
-if not results:
-    st.info("No matches. Try another keyword.")
-    st.stop()
 
-selected_id = st.selectbox(
-    "Select a grant",
-    options=[grant["id"] for grant in results],
-    format_func=lambda grant_id: next(
-        grant["title"] for grant in results
-        if grant["id"] == grant_id
-    ),
-)
+def remember_search():
+    st.session_state.search_text = st.session_state.search_input
 
-grant = next(g for g in results if g["id"] == selected_id)
 
-st.subheader(grant["title"])
-st.write(f"**Funder:** {grant['funder']}")
-st.write(f"**Deadline:** {grant.get('deadline') or 'Not stated'}")
-st.write(grant["description"])
-st.write(f"**Eligibility:** {grant['eligibility_text']}")
+def share_button(grant, key):
+    if st.button("Share to workspace", key=key):
+        try:
+            created = share_grant(grant)
+            if created:
+                st.success("Added to agency workspace.")
+            else:
+                st.info("Already in the agency workspace.")
+        except (AzureError, KeyError, ValueError):
+            st.error("Could not save. Check the Azure connection.")
 
-if grant.get("source_url"):
-    st.link_button("View original posting", grant["source_url"])
+
+def show_source(grant):
+    if grant.get("source_url"):
+        st.link_button("Official posting ↗", grant["source_url"])
+
+
+# Navigation
+columns = st.columns(3)
+
+for column, page in zip(
+    columns,
+    ["Search", "Grant Details", "Workspace"],
+):
+    with column:
+        if st.button(
+            page,
+            key=f"navigation-{page}",
+            type=(
+                "primary"
+                if st.session_state.page == page
+                else "secondary"
+            ),
+            use_container_width=True,
+        ):
+            navigate(page)
 
 st.divider()
 
-if st.button("Share to agency workspace"):
-    try:
-        created = share_grant(grant)
 
-        if created:
-            st.success("Grant shared successfully!")
-        else:
-            st.info("This grant is already in the workspace.")
-    except (AzureError, KeyError, ValueError):
-        st.error(
-            "Could not save to Azure. Check the connection "
-            "and try again."
+# SEARCH
+if st.session_state.page == "Search":
+    st.header("Find funding opportunities")
+    st.write("Explore grants and share opportunities with your agency.")
+
+    st.session_state.setdefault(
+        "search_input",
+        st.session_state.search_text,
+    )
+
+    keyword = st.text_input(
+        "Keywords",
+        placeholder="Search by topic, program, or project...",
+        key="search_input",
+        on_change=remember_search,
+    )
+
+    sort_by = st.selectbox(
+        "Sort results",
+        ["Original order", "Title A–Z"],
+    )
+
+    query = keyword.strip().lower()
+
+    results = [
+        grant
+        for grant in grants
+        if query in (
+            f"{grant.get('title', '')} "
+            f"{grant.get('description', '')}"
+        ).lower()
+    ]
+
+    if sort_by == "Title A–Z":
+        results = sorted(
+            results,
+            key=lambda grant: grant.get("title", "").lower(),
         )
 
-st.header("Agency workspace")
-st.caption(
-    "Demo: one shared agency workspace. Login is not connected yet."
-)
+    st.subheader("Grant opportunities")
+    st.caption(f"{len(results)} results")
 
-st.button("Refresh workspace")
+    if not results:
+        st.info("No matches. Try another keyword.")
 
-try:
-    shared_records = list_shared_grants()
-except (AzureError, KeyError, ValueError):
-    st.error("Could not load the workspace from Azure.")
-    shared_records = None
+    for grant in results:
+        with st.container(border=True):
+            main, relevance = st.columns([4, 1])
 
-if shared_records is not None:
-    if not shared_records:
-        st.info("No grants shared yet.")
+            with main:
+                st.subheader(grant["title"])
+                st.caption(
+                    grant.get("funder") or "Funder not stated"
+                )
 
-    for record in shared_records:
-        saved_grant = record["grant"]
+            with relevance:
+                st.caption("Relevance")
+                st.write("Not calculated")
 
-        with st.expander(saved_grant["title"]):
-            st.write(
-                f"**Funder:** {saved_grant.get('funder') or 'Not stated'}"
-            )
-            st.write(f"**Status:** {record['status']}")
-            st.write(
-                saved_grant.get("description") or "Not stated"
-            )
             st.write(
                 f"**Deadline:** "
-                f"{saved_grant.get('deadline') or 'Not stated'}"
+                f"{grant.get('deadline') or 'Not stated'}"
             )
+            st.write(
+                f"**Eligibility:** "
+                f"{grant.get('eligibility_text') or 'Not stated'}"
+            )
+            st.write(
+                grant.get("description") or "Not stated"
+            )
+
+            share_column, detail_column = st.columns(2)
+
+            with share_column:
+                share_button(
+                    grant,
+                    f"search-share-{grant['id']}",
+                )
+
+            with detail_column:
+                if st.button(
+                    "View details →",
+                    key=f"search-details-{grant['id']}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    navigate("Grant Details", grant)
+
+
+# GRANT DETAILS
+elif st.session_state.page == "Grant Details":
+    grant = st.session_state.selected_grant
+
+    if grant is None:
+        st.info("Open a grant from Search or Workspace.")
+    else:
+        if st.button("← Back to search"):
+            navigate("Search")
+
+        st.header(grant["title"])
+
+        facts, content = st.columns([1, 2])
+
+        with facts:
+            with st.container(border=True):
+                st.subheader("Key information")
+
+                st.write("**Funder**")
+                st.write(grant.get("funder") or "Not stated")
+
+                st.write("**Deadline**")
+                st.write(grant.get("deadline") or "Not stated")
+
+                st.write("**Eligibility**")
+                st.write(
+                    grant.get("eligibility_text") or "Not stated"
+                )
+                st.caption("Verify against the official notice.")
+
+                show_source(grant)
+                share_button(grant, "detail-share")
+
+        with content:
+            with st.container(border=True):
+                st.subheader("Overview")
+                st.write(
+                    grant.get("description") or "Not stated"
+                )
+
+                st.subheader("Application requirements")
+                st.write(
+                    grant.get("requirements") or "Not stated"
+                )
+
+                st.subheader("Why this matches")
+                st.write(
+                    "Agency matching has not been calculated yet."
+                )
+
+
+# WORKSPACE
+elif st.session_state.page == "Workspace":
+    st.header("Agency workspace")
+    st.caption(
+        "One shared demo agency · login not connected yet"
+    )
+
+    st.button("Refresh workspace")
+
+    try:
+        records = list_shared_grants()
+    except (AzureError, KeyError, ValueError):
+        st.error("Could not load the workspace from Azure.")
+        records = None
+
+    if records is not None:
+        if not records:
+            st.info(
+                "No shared grants yet. Share an opportunity from Search."
+            )
+        else:
+            st.dataframe(
+                [
+                    {
+                        "Grant": record["grant"]["title"],
+                        "Funder": (
+                            record["grant"].get("funder")
+                            or "Not stated"
+                        ),
+                        "Deadline": (
+                            record["grant"].get("deadline")
+                            or "Not stated"
+                        ),
+                        "Status": (
+                            record.get("status") or "Not Reviewed"
+                        ),
+                    }
+                    for record in records
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+
+            st.subheader("Open a shared grant")
+
+            for record in records:
+                grant = record["grant"]
+
+                if st.button(
+                    grant["title"],
+                    key=f"workspace-details-{grant['id']}",
+                ):
+                    navigate("Grant Details", grant)
