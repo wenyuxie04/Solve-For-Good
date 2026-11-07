@@ -499,9 +499,20 @@ elif st.session_state.page == "Workspace":
         records = None
 
     if records is not None:
+        show_passed = st.checkbox(
+            "Show passed grants",
+            value=False,
+        )
+        if not show_passed:
+            records = [
+                record
+                for record in records
+                if record.get("status") != "Pass"
+            ]
         if not records:
             st.info(
-                "No shared grants yet. Share an opportunity from Search."
+                "No active shared grants. Share one from Search "
+                "or enable Show passed grants."
             )
         else:
             st.dataframe(
