@@ -245,16 +245,16 @@ if st.session_state.page == "Search":
     st.write("Explore grants and share opportunities with your agency.")
     st.caption(f"Selected agency: {agency['name']}")
 
-    with st.expander("Agency priorities"):
-        for priority in agency["priorities"]:
-            if priority.get("enabled", True):
-                st.markdown(f"**{priority['title']}**")
-                st.write(priority["description"])
-                if priority.get("source_url"):
-                    st.link_button(
-                        "View priority source",
-                        priority["source_url"],
-                    )
+    st.markdown("#### Agency priorities")
+
+    for priority in agency["priorities"]:
+        if priority.get("enabled", True):
+            st.markdown(
+                f"- **{priority['title']}** — "
+                f"{priority['description']}"
+            )
+
+    st.divider()
 
     st.session_state.setdefault(
         "search_input",
@@ -436,7 +436,6 @@ if st.session_state.page == "Search":
                 ):
                     navigate("Grant Details", grant)
 
-    # Appears once, below all results, including an empty result list.
     show_data_footer()
 
 
@@ -508,11 +507,6 @@ elif st.session_state.page == "Grant Details":
                         "Matched terms: "
                         + ", ".join(evidence["matched_keywords"])
                     )
-                    if evidence.get("source_url"):
-                        st.link_button(
-                            "Agency priority source",
-                            evidence["source_url"],
-                        )
 
                 st.subheader("Applicant-type check")
                 st.write(match["eligibility"]["status"])
