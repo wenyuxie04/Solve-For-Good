@@ -464,9 +464,9 @@ with st.sidebar:
 
     st.divider()
 
-    for page in [
-        "Search", "Grant Details", "Workspace", "Dashboard"
-    ]:
+       pages = ["Search", "Workspace", "Dashboard"]
+
+    for index, page in enumerate(pages):
         if st.button(
             page,
             key=f"navigation-{page}",
@@ -478,6 +478,9 @@ with st.sidebar:
             use_container_width=True,
         ):
             navigate(page)
+
+        if index < len(pages) - 1:
+            st.divider()
 
     st.divider()
     st.caption("Prototype · Login not connected")
