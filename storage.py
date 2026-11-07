@@ -76,6 +76,7 @@ def update_review_status(record, status, assigned_reviewer=""):
         for key, value in record.items()
         if not key.startswith("_")
     }
+    updated["status"] = status
     updated["assigned_reviewer"] = assigned_reviewer.strip()
     updated["updated_at"] = datetime.now(timezone.utc).isoformat()
 
