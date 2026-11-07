@@ -3,8 +3,11 @@ import json
 import os
 from datetime import datetime, timezone
 
+
 from azure.core.exceptions import ResourceExistsError
 from azure.storage.blob import BlobServiceClient, ContentSettings
+from azure.core import MatchConditions
+from azure.core.exceptions import ResourceModifiedError
 
 
 def get_container():
@@ -47,13 +50,47 @@ def list_shared_grants(workspace_id="demo-agency"):
     records = []
 
     for item in container.list_blobs(name_starts_with=prefix):
-        content = container.get_blob_client(
+        download = container.get_blob_client(
             item.name
-        ).download_blob().readall()
-        records.append(json.loads(content))
+        ).download_blob()
+
+        record = json.loads(download.readall())
+        record["_blob_name"] = item.name
+        record["_etag"] = download.properties.etag
+        records.append(record)
 
     return sorted(
         records,
         key=lambda record: record["shared_at"],
         reverse=True,
     )
+
+def update_review_status(record, status):
+    allowed = {"Not Reviewed", "Under Review", "Pursue", "Pass"}
+
+    if status not in allowed:
+        raise ValueError("Invalid review status")
+
+    updated = {
+        key: value
+        for key, value in record.items()
+        if not key.startswith("_")
+    }
+    updated["status"] = status
+    updated["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    blob = get_container().get_blob_client(record["_blob_name"])
+
+    try:
+        blob.upload_blob(
+            json.dumps(updated, ensure_ascii=False).encode("utf-8"),
+            overwrite=True,
+            etag=record["_etag"],
+            match_condition=MatchConditions.IfNotModified,
+            content_settings=ContentSettings(
+                content_type="application/json"
+            ),
+        )
+        return True
+    except ResourceModifiedError:
+        return False
