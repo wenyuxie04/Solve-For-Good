@@ -113,8 +113,13 @@ def share_button(grant, key, workspace_id):
 
 
 def show_source(grant):
-    if grant.get("source_url"):
-        st.link_button("Official posting ↗", grant["source_url"])
+    url = grant.get("source_url")
+
+    if url:
+        st.link_button("Open original grant announcement ↗", url)
+        st.caption(url)
+    else:
+        st.caption("Original announcement link not available.")
 
 
 # Left sidebar navigation
@@ -222,7 +227,16 @@ if st.session_state.page == "Search":
                 st.caption(
                     grant.get("funder") or "Funder not stated"
                 )
+                st.write(
+                    "**Funding opportunity number:** "
+                    + (grant.get("opportunity_number") or "Not stated")
+                )
 
+                if grant.get("source_url"):
+                    st.link_button(
+                        "View on Grants.gov ↗",
+                        grant["source_url"],
+                    )
             with relevance:
                 st.caption("Keyword matches")
                 st.write(str(match["keyword_count"]))
@@ -282,7 +296,10 @@ elif st.session_state.page == "Grant Details":
         with facts:
             with st.container(border=True):
                 st.subheader("Key information")
-
+                st.write("**Funding opportunity number**")
+                st.write(
+                    grant.get("opportunity_number") or "Not stated"
+                )
                 st.write("**Funder**")
                 st.write(grant.get("funder") or "Not stated")
 
