@@ -83,14 +83,13 @@ def show_source(grant):
         st.link_button("Official posting ↗", grant["source_url"])
 
 
-# Navigation
-columns = st.columns(3)
+# Left sidebar navigation
+with st.sidebar:
+    st.markdown("### Federal Funds Matchmaker")
+    st.caption("Agency funding workspace")
+    st.divider()
 
-for column, page in zip(
-    columns,
-    ["Search", "Grant Details", "Workspace"],
-):
-    with column:
+    for page in ["Search", "Grant Details", "Workspace"]:
         if st.button(
             page,
             key=f"navigation-{page}",
@@ -103,7 +102,8 @@ for column, page in zip(
         ):
             navigate(page)
 
-st.divider()
+    st.divider()
+    st.caption("Demo · Login not connected")
 
 
 # SEARCH
