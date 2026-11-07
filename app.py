@@ -292,8 +292,7 @@ elif st.session_state.page == "Workspace":
                 hide_index=True,
                 use_container_width=True,
             )
-
-                        st.subheader("Review shared grants")
+            st.subheader("Review shared grants")
 
             statuses = [
                 "Not Reviewed",
