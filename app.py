@@ -583,10 +583,7 @@ elif st.session_state.page == "Workspace":
                             )
 
                             if saved:
-                                st.success(
-                                    "Saved to Azure. Click Refresh "
-                                    "workspace to update the table."
-                                )
+                                st.rerun()
                             else:
                                 st.warning(
                                     "Someone updated this grant. "
