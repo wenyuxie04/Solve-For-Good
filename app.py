@@ -8,6 +8,7 @@ from storage import (
     share_grant,
     list_shared_grants,
     update_review_status,
+    add_comment,
 )
 
 
@@ -365,7 +366,49 @@ elif st.session_state.page == "Workspace":
                                 "Could not save the status. "
                                 "Please try again."
                             )
+                    st.markdown("#### Comments")
 
+                    for comment in record.get("comments", []):
+                        st.text(
+                            f"{comment['author']} · "
+                            f"{comment['created_at']}"
+                        )
+                        st.text(comment["text"])
+                        st.divider()
+
+                    with st.form(f"comment-{version_key}"):
+                        author = st.text_input(
+                            "Your name",
+                            placeholder="Demo identity",
+                        )
+                        comment_text = st.text_area("Comment")
+                        post_comment = st.form_submit_button(
+                            "Post comment"
+                        )
+
+                    if post_comment:
+                        if not author.strip() or not comment_text.strip():
+                            st.warning(
+                                "Enter your name and a comment."
+                            )
+                        else:
+                            try:
+                                saved = add_comment(
+                                    record, author, comment_text
+                                )
+                                if saved:
+                                    st.rerun()
+                                else:
+                                    st.warning(
+                                        "This grant changed. Copy your "
+                                        "comment, refresh the workspace, "
+                                        "and try again."
+                                    )
+                            except (AzureError, KeyError, ValueError):
+                                st.error(
+                                    "Could not save your comment. "
+                                    "Copy it before refreshing."
+                                )
                     if st.button(
                         "View full details",
                         key=f"workspace-details-{grant['id']}",
