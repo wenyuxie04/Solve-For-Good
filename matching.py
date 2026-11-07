@@ -18,12 +18,73 @@ def contains_phrase(text, phrase):
 
 
 def assess_eligibility(grant, agency):
-    """
-    Check structured applicant types only.
-    This does not establish full grant eligibility.
-    """
-    allowed = grant.get("eligible_applicant_types")
     applicant_type = agency.get("applicant_type")
+
+    # Real Grants.gov records: use the original applicant codes.
+    raw_types = grant.get("applicant_types_raw") or []
+
+    codes = {
+        str(item["id"]).strip().zfill(2)
+        for item in raw_types
+        if item.get("id") is not None
+    }
+
+    known_codes = {
+        "00", "01", "02", "04", "05", "06", "07", "08",
+        "11", "12", "13", "20", "21", "22", "23", "25", "99",
+    }
+
+    if codes:
+        if applicant_type != "state_government":
+            return {
+                "status": "Needs verification",
+                "reason": (
+                    "Automatic Grants.gov code checking currently "
+                    "supports state-government profiles only."
+                ),
+            }
+
+        if "00" in codes:
+            return {
+                "status": "Applicant type matches",
+                "reason": (
+                    "Grants.gov explicitly lists state governments. "
+                    "Review additional eligibility conditions before "
+                    "deciding to apply."
+                ),
+            }
+
+        if "99" in codes:
+            return {
+                "status": "Needs verification",
+                "reason": (
+                    "Grants.gov lists unrestricted applicants, "
+                    "subject to additional eligibility conditions. "
+                    "Review the official announcement."
+                ),
+            }
+
+        if "25" in codes or not codes.issubset(known_codes):
+            return {
+                "status": "Needs verification",
+                "reason": (
+                    "Applicant categories require clarification. "
+                    "Review Additional Information on Eligibility "
+                    "in the official announcement."
+                ),
+            }
+
+        return {
+            "status": "Applicant type does not match",
+            "reason": (
+                "The listed categories do not include state "
+                "governments, unrestricted applicants, or Others. "
+                "Verify the official announcement."
+            ),
+        }
+
+    # Locally curated or demo records.
+    allowed = grant.get("eligible_applicant_types")
 
     if not allowed or not applicant_type:
         return {
@@ -35,16 +96,16 @@ def assess_eligibility(grant, agency):
         return {
             "status": "Applicant type matches",
             "reason": (
-                "The listed applicant types include this agency's type. "
-                "Other eligibility conditions still require review."
+                "The listed applicant types include this agency's "
+                "type. Other eligibility conditions require review."
             ),
         }
 
     return {
         "status": "Applicant type does not match",
         "reason": (
-            "The listed applicant types do not include this agency's "
-            "type. Check the official notice for exceptions."
+            "The listed applicant types do not include this "
+            "agency's type. Verify the official announcement."
         ),
     }
 
