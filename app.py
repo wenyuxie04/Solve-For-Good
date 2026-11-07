@@ -286,6 +286,10 @@ elif st.session_state.page == "Workspace":
                         "Status": (
                             record.get("status") or "Not Reviewed"
                         ),
+                        "Reviewer": (
+                            record.get("assigned_reviewer")
+                            or "Unassigned"
+                        ),
                     }
                     for record in records
                 ],
@@ -327,14 +331,22 @@ elif st.session_state.page == "Workspace":
                             statuses,
                             index=statuses.index(current_status),
                         )
+                        assigned_reviewer = st.text_input(
+                            "Assigned reviewer",
+                            value=record.get("assigned_reviewer", ""),
+                            placeholder="Enter a teammate's name",
+                        )
+
                         submitted = st.form_submit_button(
-                            "Save status"
+                            "Save review"
                         )
 
                     if submitted:
                         try:
                             saved = update_review_status(
-                                record, selected_status
+                                record,
+                                selected_status,
+                                assigned_reviewer,
                             )
 
                             if saved:
