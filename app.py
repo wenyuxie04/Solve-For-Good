@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from matching import match_grant
 
 import streamlit as st
 from azure.core.exceptions import AzureError
@@ -159,7 +160,7 @@ if st.session_state.page == "Search":
 
     sort_by = st.selectbox(
         "Sort results",
-        ["Original order", "Title A–Z"],
+        ["Best keyword match", "Original order", "Title A–Z"],
     )
 
     query = keyword.strip().lower()
@@ -173,7 +174,16 @@ if st.session_state.page == "Search":
         ).lower()
     ]
 
-    if sort_by == "Title A–Z":
+    if sort_by == "Best keyword match":
+        results = sorted(
+            results,
+            key=lambda grant: (
+                -match_grant(grant, agency)["keyword_count"],
+                grant["title"].lower(),
+            ),
+        )
+
+    elif sort_by == "Title A–Z":
         results = sorted(
             results,
             key=lambda grant: grant.get("title", "").lower(),
@@ -186,6 +196,8 @@ if st.session_state.page == "Search":
         st.info("No matches. Try another keyword.")
 
     for grant in results:
+        match = match_grant(grant, agency)
+
         with st.container(border=True):
             main, relevance = st.columns([4, 1])
 
@@ -196,8 +208,8 @@ if st.session_state.page == "Search":
                 )
 
             with relevance:
-                st.caption("Relevance")
-                st.write("Not calculated")
+                st.caption("Keyword matches")
+                st.write(str(match["keyword_count"]))
 
             st.write(
                 f"**Deadline:** "
@@ -210,7 +222,14 @@ if st.session_state.page == "Search":
             st.write(
                 grant.get("description") or "Not stated"
             )
+            st.write("**Why this matches**")
+            st.write(match["reason"])
 
+            st.write(
+                f"**Applicant-type check:** "
+                f"{match['eligibility']['status']}"
+            )
+            st.caption(match["eligibility"]["reason"])
             share_column, detail_column = st.columns(2)
 
             with share_column:
@@ -275,9 +294,26 @@ elif st.session_state.page == "Grant Details":
                 )
 
                 st.subheader("Why this matches")
-                st.write(
-                    "Agency matching has not been calculated yet."
-                )
+                match = match_grant(grant, agency)
+                st.write(match["reason"])
+
+                for evidence in match["priority_matches"]:
+                    st.write(
+                        f"**{evidence['priority_title']}**"
+                    )
+                    st.write(
+                        "Matched terms: "
+                        + ", ".join(evidence["matched_keywords"])
+                    )
+                    if evidence.get("source_url"):
+                        st.link_button(
+                            "Agency priority source",
+                            evidence["source_url"],
+                        )
+
+                st.subheader("Applicant-type check")
+                st.write(match["eligibility"]["status"])
+                st.caption(match["eligibility"]["reason"])
 
 
 # WORKSPACE
