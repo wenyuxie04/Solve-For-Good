@@ -30,3 +30,20 @@
 * **Description:** Directing environmental infrastructure grants, planning grants, and technical outreach to designated "Distressed" local government units to build long-term operational viability and public infrastructure safety.
 * **Keywords:** Infrastructure, Distressed Communities, Capacity Building, Local Government, Grants
 * **Source:** [NC DEQ Strategic Plan 2025–2029 (Strategy 4.C)](https://www.osbm.nc.gov/strategic-plan-deq/open)
+## 3. Agricultural Development and Farmland Preservation Grant
+- **Agency:** NCDA&CS
+- **Target Area:** Farmland Conservation Easements
+- **Priority Alignment:** Farmland Preservation & Agribusiness
+- **Eligibility:** Local Governments, Nonprofit Land Trusts
+
+## 4. Rural Transformation Grant Fund
+- **Agency:** NC Commerce
+- **Target Area:** Downtown Revitalization & Infrastructure
+- **Priority Alignment:** Rural Infrastructure & Economic Development
+- **Eligibility:** Rural Local Governments
+
+## 5. Parks and Recreation Trust Fund (PARTF)
+- **Agency:** NC DNCR
+- **Target Area:** Public Park Acquisition & Facility Renovation
+- **Priority Alignment:** Outdoor Recreation & Conservation
+- **Eligibility:** NC Counties and Municipalities
