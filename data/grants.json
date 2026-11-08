@@ -1,0 +1,77 @@
+[
+  {
+    "id": "demo-water-001",
+    "is_demo": true,
+    "title": "[DEMO] Water Quality and PFAS Monitoring",
+    "funder": "Example Federal Environmental Funder",
+    "description": "Supports state government projects for water quality monitoring, PFAS assessment, groundwater protection, and watershed planning.",
+    "deadline": null,
+    "award_min": 100000,
+    "award_max": 500000,
+    "eligible_applicant_types": ["state_government"],
+    "eligibility_text": "State governments may apply. Fictional test eligibility.",
+    "requirements": [
+      "Project narrative",
+      "Monitoring workplan",
+      "Detailed budget"
+    ],
+    "matching_funds_text": "Not stated",
+    "source_url": null
+  },
+  {
+    "id": "demo-recycling-002",
+    "is_demo": true,
+    "title": "[DEMO] Community Recycling Equipment",
+    "funder": "Example State Recycling Program",
+    "description": "Funds recycling equipment, materials recovery, and solid waste reduction projects for local governments.",
+    "deadline": null,
+    "award_min": null,
+    "award_max": 100000,
+    "eligible_applicant_types": ["local_government"],
+    "eligibility_text": "Only local governments may apply; state agencies are not eligible. Fictional test eligibility.",
+    "requirements": [
+      "Equipment proposal",
+      "Project budget",
+      "Local government authorization"
+    ],
+    "matching_funds_text": "20% applicant contribution. Fictional test requirement.",
+    "source_url": null
+  },
+  {
+    "id": "demo-flood-003",
+    "is_demo": true,
+    "title": "[DEMO] Flood Resilience Planning",
+    "funder": "Example Federal Resilience Funder",
+    "description": "Supports flood mitigation, disaster recovery planning, and nature-based solutions that improve community resilience to extreme weather.",
+    "deadline": null,
+    "award_min": null,
+    "award_max": null,
+    "eligible_applicant_types": null,
+    "eligibility_text": "Not stated",
+    "requirements": [
+      "Resilience project description",
+      "Implementation timeline"
+    ],
+    "matching_funds_text": "Not stated",
+    "source_url": null
+  },
+  {
+    "id": "demo-health-004",
+    "is_demo": true,
+    "title": "[DEMO] Hospital Workforce Training",
+    "funder": "Example Federal Health Funder",
+    "description": "Supports nurse recruitment, clinical staff training, and hospital workforce retention.",
+    "deadline": null,
+    "award_min": 50000,
+    "award_max": 200000,
+    "eligible_applicant_types": ["state_government"],
+    "eligibility_text": "State governments may apply. Fictional test eligibility.",
+    "requirements": [
+      "Training plan",
+      "Staffing assessment",
+      "Project budget"
+    ],
+    "matching_funds_text": "Not stated",
+    "source_url": null
+  }
+]
